@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(./ts-logs --help)",
+      "Bash(./ts-logs:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}
