@@ -2,7 +2,14 @@
 
 set -euo pipefail
 
-TAILNET="sunflower-labs.com"
+# Load environment variables from .env file if it exists
+if [[ -f .env ]]; then
+    # shellcheck disable=SC1091
+    source .env
+fi
+
+# Default values (can be overridden by .env or command line)
+TAILNET="${TAILNET:-your-tailnet.com}"
 OUTPUT_FORMAT="table"
 FILTER_TYPE=""
 FILTER_NODE=""
@@ -29,7 +36,7 @@ Output Options:
     -s, --summary          Show summary statistics only
 
 Other Options:
-    -T, --tailnet NAME      Tailnet name (default: sunflower-labs.com)
+    -T, --tailnet NAME      Tailnet name (default: your-tailnet.com)
     -h, --help             Show this help
 
 Format Options:
@@ -50,13 +57,36 @@ Examples:
 EOF
 }
 
+check_configuration() {
+    # Check if tailnet is still the default placeholder
+    if [[ "$TAILNET" == "your-tailnet.com" || "$TAILNET" == "your-tailnet-here.com" ]]; then
+        echo "Error: Tailnet not configured." >&2
+        echo "" >&2
+        echo "To fix this:" >&2
+        echo "1. Find your tailnet name at: https://login.tailscale.com/admin/settings/general" >&2
+        echo "2. Either:" >&2
+        echo "   - Copy .env.example to .env and set TAILNET=your-actual-tailnet.com" >&2
+        echo "   - Use command line: $0 -T your-actual-tailnet.com [other options]" >&2
+        echo "   - Set environment variable: export TAILNET='your-actual-tailnet.com'" >&2
+        exit 1
+    fi
+}
+
 get_api_token() {
     if [[ -n "${TAILSCALE_API_TOKEN:-}" ]]; then
         echo "$TAILSCALE_API_TOKEN"
     elif [[ -f "api-token" ]]; then
         cat api-token
     else
-        echo "Error: No API token found. Set TAILSCALE_API_TOKEN environment variable or create api-token file." >&2
+        echo "Error: No Tailscale API token found." >&2
+        echo "" >&2
+        echo "To fix this, you need to:" >&2
+        echo "1. Get an API token from: https://login.tailscale.com/admin/settings/keys" >&2
+        echo "2. Click 'Generate API key' and set permissions: logs:network:read and devices:read" >&2
+        echo "3. Either:" >&2
+        echo "   - Copy .env.example to .env and add your token there (recommended)" >&2
+        echo "   - Set environment variable: export TAILSCALE_API_TOKEN='your-token'" >&2
+        echo "   - Or create an 'api-token' file with your token" >&2
         exit 1
     fi
 }
@@ -574,6 +604,9 @@ main() {
                 ;;
         esac
     done
+    
+    # Check configuration before proceeding
+    check_configuration
     
     # Set time range based on parsed arguments
     if [[ -n "$minutes" ]]; then

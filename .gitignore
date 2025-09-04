@@ -1,0 +1,12 @@
+# API tokens and secrets
+api-token
+.env
+
+# System files
+.DS_Store
+*.swp
+*.swo
+
+# IDE files
+.vscode/
+.idea/

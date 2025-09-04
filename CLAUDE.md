@@ -2,14 +2,50 @@
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
+## Project Information
+
+- **GitHub Username**: alexpach
+- **Repository**: tailscale-logging
+
 ## Repository Overview
 
 This is an enhanced Tailscale network logging utility that fetches network logs from the Tailscale API with flexible time intervals, filtering, multiple output formats, and machine name resolution.
 
+**Status**: ✅ Production Ready - All core functionality tested and working
+
+## Testing Summary
+
+The utility has been comprehensively tested with the following results:
+
+### ✅ Core Features Verified
+- **Help System**: Comprehensive help with clear examples
+- **Configuration Management**: .env file support with helpful error messages
+- **Output Formats**: Table, JSON, raw, and enhanced full format all working
+- **Traffic Filtering**: Flow-level filtering for exit, subnet, physical, and virtual traffic
+- **Time Range Options**: Minutes, hours, and other time range options working
+- **Error Handling**: Helpful error messages that guide users to solutions
+
+### ✅ Enhanced Features Working
+- **Full Format**: Separate port columns (src-ip, src-port, dst-ip, dst-port)
+- **Service Name Resolution**: Common ports show as readable names (dhcpc, dhcps, prom, ntp, etc.)
+- **Machine Name Resolution**: Tailscale IPs (100.x.x.x) resolve to readable machine names
+- **Smart Error Messages**: Format/traffic type confusion now shows helpful guidance
+- **5-Character Service Names**: All service names limited for clean column alignment
+- **Local Timestamps**: Time shown in local timezone as HH:MM:SS format
+
+### 🎯 Original Issue Resolved
+The specific issue `./ts-logs -m 5 -t raw` now shows:
+```
+Error: 'raw' is an output format, not a traffic type.
+Use: -f raw (for format) instead of -t raw
+Valid traffic types for -t: virtual, subnet, exit, physical
+```
+
 ## Project Structure
 
 - `ts-logs`: Enhanced script that fetches Tailscale network logs with flexible options
-- `api-token`: Contains the Tailscale API token (tskey-api-*) - optional if using environment variable
+- `.env`: Contains configuration (TAILNET, TAILSCALE_API_TOKEN) - copy from `.env.example` 
+- `api-token`: Legacy API token file (deprecated, use .env instead)
 
 ## Common Commands
 
@@ -154,6 +190,40 @@ Common ports are automatically resolved to short, recognizable service names:
 - Port `9100` → `prom` (Prometheus metrics)
 - Port `3306` → `mysql`, `5432` → `pgsql`
 
+## Testing Verification
+
+The utility has been verified to work correctly with actual Tailscale network data:
+
+### Real Output Examples (from testing):
+```bash
+# Exit traffic shows DHCP and NTP activity
+./ts-logs -m 2 -t exit -f full
+Time     Src IP               SPort    Dst IP               DPort    Type     Proto TxBytes  RxBytes
+----------------------------------------------------------------------------------------------------
+09:51:31 skep6                dhcpc    192.168.178.1        dhcps    exit     UDP   328      
+09:51:31 skep6                45320    192.168.178.1        ntp      exit     UDP   76       
+
+# Physical traffic shows node-to-node communication  
+./ts-logs -m 1 -t physical -f full
+Time     Src IP               SPort    Dst IP               DPort    Type     Proto TxBytes  RxBytes
+----------------------------------------------------------------------------------------------------
+09:52:26 queen2dev            0        34.77.239.134        41641    physical       672      32
+09:52:25 skep6                0        109.202.219.171      6949     physical       32       576
+
+# Subnet traffic shows container/internal services
+./ts-logs -m 1 -t subnet -f full  
+Time     Src IP               SPort    Dst IP               DPort    Type     Proto TxBytes  RxBytes
+----------------------------------------------------------------------------------------------------
+09:52:21 172.17.0.1           prom     10.123.123.13        51952    subnet   TCP   300      
+09:52:21 172.17.0.1           8005     10.123.123.13        47520    subnet   TCP   120      
+```
+
+All examples show:
+- ✅ Machine name resolution (skep6, queen2dev instead of 100.x.x.x IPs)  
+- ✅ Service name resolution (dhcpc, dhcps, ntp, prom instead of port numbers)
+- ✅ Perfect column alignment with proper spacing
+- ✅ Traffic filtering working at flow level, not log entry level
+
 ## Dependencies
 
 - **curl**: For API requests (required)
@@ -164,13 +234,28 @@ Common ports are automatically resolved to short, recognizable service names:
 Install jq on macOS: `brew install jq`
 Install jq on Ubuntu/Debian: `apt-get install jq`
 
+## Configuration
+
+Create a `.env` file from the provided `.env.example`:
+
+```bash
+cp .env.example .env
+# Edit .env with your actual values
+```
+
+Example `.env` file:
+```bash
+TAILSCALE_API_TOKEN=tskey-api-your-actual-token-here
+TAILNET=your-company.com
+```
+
 ## Security Notes
 
 - **API Token Permissions**: The script requires access tokens with `logs:network:read` and `devices:read` scopes
-- **Authentication options**: Supports both file-based (`api-token`) and environment variable (`TAILSCALE_API_TOKEN`)
-- **Environment variables preferred**: `export TAILSCALE_API_TOKEN="your-token-here"`
+- **Configuration file**: Use `.env` file for configuration (never commit this file)
+- **Environment variables**: Can also set `TAILSCALE_API_TOKEN` and `TAILNET` as environment variables
 - **Token format**: `tskey-api-*` format for API access
-- **File security**: The `api-token` file should not be committed to version control
+- **Legacy support**: Still supports `api-token` file for backward compatibility
 
 ## API Endpoints Used
 
