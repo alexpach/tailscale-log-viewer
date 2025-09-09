@@ -9,4 +9,8 @@ api-token
 
 # IDE files
 .vscode/
+.claude/settings.local.json
 .idea/
+
+# Local examples
+examples/

@@ -12,7 +12,8 @@ fi
 TAILNET="${TAILNET:-your-tailnet.com}"
 OUTPUT_FORMAT="table"
 FILTER_TYPE=""
-FILTER_NODE=""
+FILTER_SRC=""
+FILTER_DST=""
 
 show_help() {
     cat << EOF
@@ -24,35 +25,38 @@ Time Options (pick one):
     -m, --minutes N         Last N minutes
     -H, --hours N           Last N hours
     -d, --days N            Last N days  
-    -S, --since TIMESTAMP   Start time (RFC 3339 format)
-    -U, --until TIMESTAMP   End time (RFC 3339 format, requires --since)
+        --since TIMESTAMP   Start time (RFC 3339 format)
+        --until TIMESTAMP   End time (RFC 3339 format, requires --since)
         --today             Today's logs
         --yesterday         Yesterday's logs
 
 Output Options:
-    -f, --format FORMAT     Output format: table, json, raw, compact, full (default: table)
+    -f, --format FORMAT     Output format: table, json, raw, compact (default: table)
     -t, --filter-type TYPE  Filter by traffic type: virtual, subnet, exit, physical
-    -n, --filter-node ID    Filter by node ID
-    -s, --summary          Show summary statistics only
+    -S, --src FILTER        Filter by source (machine name, IP, or node ID)
+    -D, --dst FILTER        Filter by destination (machine name, IP, or node ID)
+    -s, --summary           Show summary statistics only
 
 Other Options:
     -T, --tailnet NAME      Tailnet name (default: your-tailnet.com)
-    -h, --help             Show this help
+    -h, --help              Show this help
 
 Format Options:
-    table    - Formatted table with machine names (default)
-    compact  - One line per entry with all fields
-    full     - All traffic flows with: start, src-ip, src-port, dst-ip, dst-port, type, proto, txBytes, rxBytes
+    table    - All traffic flows with: time, src-ip, src-port, dst-ip, dst-port, type, proto, txBytes, rxBytes (default)
+    compact  - Simplified view: time, src-ip, dst-ip, type
     json     - Pretty formatted JSON
     raw      - Raw JSON output
 
 Examples:
-    $0 -m 30                        # Last 30 minutes in table format
-    $0 -H 6 -f compact              # Last 6 hours in compact format  
-    $0 -m 15 -f full                # Last 15 minutes with all traffic details
-    $0 -d 7 -t exit                 # Last 7 days of exit traffic
-    $0 --today -t virtual           # Today's virtual traffic only
-    $0 -m 5 -t exit -f full         # Last 5 minutes of exit traffic, full details
+    $0 -m 30                            # Last 30 minutes in table format
+    $0 -H 6 -f compact                  # Last 6 hours in compact format  
+    $0 -m 15                            # Last 15 minutes with all traffic details
+    $0 -d 7 -t exit                     # Last 7 days of exit traffic
+    $0 --today -t virtual               # Today's virtual traffic only
+    $0 -m 5 -t exit -f compact          # Last 5 minutes of exit traffic, simplified view
+    $0 -H 2 -S laptop-work              # Last 2 hours from source 'laptop-work'
+    $0 -m 10 -D 100.64.0.1              # Last 10 minutes to destination IP
+    $0 -H 1 -S server -D 192.168.1      # Last hour from 'server' to '192.168.1' subnet
 
 EOF
 }
@@ -120,67 +124,195 @@ format_json_output() {
     fi
 }
 
-format_table_output() {
-    local response="$1"
-    local ip_name_mapping="$2"
-    if command -v jq >/dev/null 2>&1; then
-        echo "Timestamp                Machine Name             Traffic Type    Duration"
-        echo "------------------------------------------------------------------------"
-        echo "$response" | jq -r '
-        .logs[]? // [] | select(.) | 
-        . as $log |
-        (if .virtualTraffic then "virtual" 
-         elif .subnetTraffic then "subnet"
-         elif .exitTraffic then "exit"
-         elif .physicalTraffic then "physical"
-         else "unknown" end) as $traffic_type |
-        (if .virtualTraffic then (.virtualTraffic[0].src // .virtualTraffic[0].dst // "unknown")
-         elif .subnetTraffic then (.subnetTraffic[0].src // .subnetTraffic[0].dst // "unknown") 
-         elif .exitTraffic then (.exitTraffic[0].src // "unknown")
-         elif .physicalTraffic then (.physicalTraffic[0].src // .physicalTraffic[0].dst // "unknown")
-         else "unknown" end) as $ip_addr |
-        "\($log.logged // $log.start) \($ip_addr | split(":")[0]) \($traffic_type) \($log.end // "N/A")"' | \
-        while read -r timestamp ip traffic_type duration; do
-            local machine_name
-            machine_name=$(lookup_machine_name "$ip" "$ip_name_mapping")
-            printf "%-24s %-24s %-15s %s\n" "$timestamp" "$machine_name" "$traffic_type" "$duration"
-        done
-    else
-        echo "jq is required for table formatting. Install jq or use --format json"
-        exit 1
-    fi
-}
 
 format_compact_output() {
     local response="$1"
     local ip_name_mapping="$2"
     if command -v jq >/dev/null 2>&1; then
-        echo "$response" | jq -r '
+        show_filtering_info "$ip_name_mapping"
+        echo "Time     Src IP                                      Dst IP                                      Type"
+        echo "--------|-------------------------------------------|-------------------------------------------|--------"
+        
+        # Check if there are any logs at all
+        local log_count=$(echo "$response" | jq -r '.logs | length // 0' 2>/dev/null || echo "0")
+        if [[ "$log_count" -eq 0 ]]; then
+            echo "No logs captured for this time range"
+            return
+        fi
+        
+        # Build the jq filter based on FILTER_TYPE
+        local jq_filter='
         .logs[]? // [] | select(.) | 
         . as $log |
-        (if .virtualTraffic then "virtual" 
-         elif .subnetTraffic then "subnet"
-         elif .exitTraffic then "exit"
-         elif .physicalTraffic then "physical"
-         else "unknown" end) as $traffic_type |
-        (if .virtualTraffic then (.virtualTraffic[0].src // .virtualTraffic[0].dst // "unknown")
-         elif .subnetTraffic then (.subnetTraffic[0].src // .subnetTraffic[0].dst // "unknown") 
-         elif .exitTraffic then (.exitTraffic[0].src // "unknown")
-         elif .physicalTraffic then (.physicalTraffic[0].src // .physicalTraffic[0].dst // "unknown")
-         else "unknown" end) as $ip_addr |
-        "\($log.logged // $log.start) | \($ip_addr | split(":")[0]) | \($traffic_type) | \($log.end // "N/A") | \(.nodeId // "unknown")"' | \
-        while read -r line; do
-            timestamp=$(echo "$line" | cut -d'|' -f1 | xargs)
-            ip=$(echo "$line" | cut -d'|' -f2 | xargs)
-            traffic_type=$(echo "$line" | cut -d'|' -f3 | xargs)
-            duration=$(echo "$line" | cut -d'|' -f4 | xargs)
-            node_id=$(echo "$line" | cut -d'|' -f5 | xargs)
+        ('
+        
+        if [[ -n "$FILTER_TYPE" ]]; then
+            case "$FILTER_TYPE" in
+                "virtual")
+                    jq_filter+='
+                    if .virtualTraffic then 
+                        .virtualTraffic[] | [$log.start, (.src // "NULL"), (.dst // "NULL"), "virtual"]
+                    else [] end'
+                    ;;
+                "subnet")
+                    jq_filter+='
+                    if .subnetTraffic then 
+                        .subnetTraffic[] | [$log.start, (.src // "NULL"), (.dst // "NULL"), "subnet"]
+                    else [] end'
+                    ;;
+                "exit")
+                    jq_filter+='
+                    if .exitTraffic then 
+                        .exitTraffic[] | [$log.start, (.src // "NULL"), (.dst // "NULL"), "exit"]
+                    else [] end'
+                    ;;
+                "physical")
+                    jq_filter+='
+                    if .physicalTraffic then 
+                        .physicalTraffic[] | [$log.start, (.src // "NULL"), (.dst // "NULL"), "physical"]
+                    else [] end'
+                    ;;
+            esac
+        else
+            # No filter - show all traffic types
+            jq_filter+='
+            if .virtualTraffic then 
+                .virtualTraffic[] | [$log.start, (.src // "NULL"), (.dst // "NULL"), "virtual"]
+            else [] end,
+            if .subnetTraffic then 
+                .subnetTraffic[] | [$log.start, (.src // "NULL"), (.dst // "NULL"), "subnet"]
+            else [] end,
+            if .exitTraffic then 
+                .exitTraffic[] | [$log.start, (.src // "NULL"), (.dst // "NULL"), "exit"]
+            else [] end,
+            if .physicalTraffic then 
+                .physicalTraffic[] | [$log.start, (.src // "NULL"), (.dst // "NULL"), "physical"]
+            else [] end'
+        fi
+        
+        jq_filter+='
+        ) | select(length > 0) | @tsv'
+        
+        # Process all flows and stream output while counting lines
+        local line_count=0
+        
+        while IFS=$'\t' read -r start src dst type; do
+            # Format timestamp to local time
+            formatted_time=$(format_timestamp "$start")
             
-            local machine_name
-            machine_name=$(lookup_machine_name "$ip" "$ip_name_mapping")
+            # Handle empty fields - convert NULL placeholders to empty strings
+            [[ "$src" == "NULL" || "$src" == "null" || -z "$src" ]] && src=""
+            [[ "$dst" == "NULL" || "$dst" == "null" || -z "$dst" ]] && dst=""
             
-            echo "$timestamp $machine_name $traffic_type $duration $node_id"
-        done
+            # Split src into IP and port (handle IPv6 [ip]:port format)
+            if [[ -n "$src" ]]; then
+                if [[ "$src" =~ ^\[.*\]:[0-9]+$ ]]; then
+                    # IPv6 format: [ipv6]:port
+                    src_ip="${src%:*}"
+                    src_port="${src##*:}"
+                elif [[ "$src" =~ ^[^:]*:[0-9]+$ ]]; then
+                    # IPv4 format: ipv4:port
+                    src_ip="${src%:*}"
+                    src_port="${src##*:}"
+                else
+                    # No port or IPv6 without port
+                    src_ip="$src"
+                    src_port=""
+                fi
+            else
+                src_ip=""
+                src_port=""
+            fi
+            
+            # Split dst into IP and port (handle IPv6 [ip]:port format)
+            if [[ -n "$dst" ]]; then
+                if [[ "$dst" =~ ^\[.*\]:[0-9]+$ ]]; then
+                    # IPv6 format: [ipv6]:port
+                    dst_ip="${dst%:*}"
+                    dst_port="${dst##*:}"
+                elif [[ "$dst" =~ ^[^:]*:[0-9]+$ ]]; then
+                    # IPv4 format: ipv4:port
+                    dst_ip="${dst%:*}"
+                    dst_port="${dst##*:}"
+                else
+                    # No port or IPv6 without port
+                    dst_ip="$dst"
+                    dst_port=""
+                fi
+            else
+                dst_ip=""
+                dst_port=""
+            fi
+            
+            # Apply source/destination filtering at flow level
+            if [[ -n "$FILTER_SRC" ]]; then
+                # Check if source matches filter (IP, machine name, or partial match)
+                local src_matches=false
+                local resolved_src_ip=$(resolve_machine_name_to_ip "$FILTER_SRC" "$ip_name_mapping")
+                
+                if [[ "$src" == *"$FILTER_SRC"* ]] || [[ "$src_ip" == *"$FILTER_SRC"* ]]; then
+                    src_matches=true
+                elif [[ -n "$resolved_src_ip" ]] && ([[ "$src" == *"$resolved_src_ip"* ]] || [[ "$src_ip" == *"$resolved_src_ip"* ]]); then
+                    src_matches=true
+                fi
+                
+                if [[ "$src_matches" != "true" ]]; then
+                    continue
+                fi
+            fi
+            
+            if [[ -n "$FILTER_DST" ]]; then
+                # Check if destination matches filter (IP, machine name, or partial match)
+                local dst_matches=false
+                local resolved_dst_ip=$(resolve_machine_name_to_ip "$FILTER_DST" "$ip_name_mapping")
+                
+                if [[ "$dst" == *"$FILTER_DST"* ]] || [[ "$dst_ip" == *"$FILTER_DST"* ]]; then
+                    dst_matches=true
+                elif [[ -n "$resolved_dst_ip" ]] && ([[ "$dst" == *"$resolved_dst_ip"* ]] || [[ "$dst_ip" == *"$resolved_dst_ip"* ]]); then
+                    dst_matches=true
+                fi
+                
+                if [[ "$dst_matches" != "true" ]]; then
+                    continue
+                fi
+            fi
+            
+            # Resolve Tailscale IPs (100.x.x.x) to machine names
+            if [[ "$src_ip" =~ ^100\. ]]; then
+                resolved_name=$(lookup_machine_name "$src_ip" "$ip_name_mapping")
+                if [[ "$resolved_name" != "$src_ip" ]]; then
+                    # Truncate long hostnames to fit column (42 chars max + ellipsis if needed)
+                    if [[ ${#resolved_name} -gt 42 ]]; then
+                        src_ip="${resolved_name:0:39}..."
+                    else
+                        src_ip="$resolved_name"
+                    fi
+                fi
+            fi
+            
+            if [[ "$dst_ip" =~ ^100\. ]]; then
+                resolved_name=$(lookup_machine_name "$dst_ip" "$ip_name_mapping")
+                if [[ "$resolved_name" != "$dst_ip" ]]; then
+                    # Truncate long hostnames to fit column (27 chars max + ellipsis if needed)
+                    if [[ ${#resolved_name} -gt 42 ]]; then
+                        dst_ip="${resolved_name:0:39}..."
+                    else
+                        dst_ip="$resolved_name"
+                    fi
+                fi
+            fi
+            
+            # Format with proper column alignment and stream output immediately
+            printf "%-8s %-43s %-43s %s\n" \
+                "$formatted_time" "$src_ip" "$dst_ip" "$type"
+            ((line_count++))
+        done < <(echo "$response" | jq -r "$jq_filter")
+        
+        # Add footer header if output is longer than 20 lines  
+        if [[ $line_count -gt 20 ]]; then
+            echo "--------|-------------------------------------------|-------------------------------------------|--------"
+            echo "Time     Src IP                                      Dst IP                                      Type"
+        fi
     else
         echo "jq is required for compact formatting. Install jq or use --format json"
         exit 1
@@ -263,12 +395,20 @@ format_timestamp() {
     fi
 }
 
-format_full_output() {
+format_table_output() {
     local response="$1"
     local ip_name_mapping="$2"
     if command -v jq >/dev/null 2>&1; then
-        echo "Time     Src IP               SPort    Dst IP               DPort    Type     Proto TxBytes  RxBytes"
-        echo "----------------------------------------------------------------------------------------------------"
+        show_filtering_info "$ip_name_mapping"
+        echo "Time     Src IP                                      SPort    Dst IP                                      DPort    Type     Proto TxBytes  RxBytes"
+        echo "--------|-------------------------------------------|--------|-------------------------------------------|--------|--------|-----|--------|-------"
+        
+        # Check if there are any logs at all
+        local log_count=$(echo "$response" | jq -r '.logs | length // 0' 2>/dev/null || echo "0")
+        if [[ "$log_count" -eq 0 ]]; then
+            echo "No logs captured for this time range"
+            return
+        fi
         
         # Build the jq filter based on FILTER_TYPE
         local jq_filter='
@@ -323,24 +463,33 @@ format_full_output() {
         jq_filter+='
         ) | select(length > 0) | @tsv'
         
-        echo "$response" | jq -r "$jq_filter" | \
+        # Process all flows and stream output while counting lines
+        local line_count=0
+        
         while IFS=$'\t' read -r start src dst type proto txBytes rxBytes; do
             # Format timestamp to local time
             formatted_time=$(format_timestamp "$start")
             
-            # Handle empty fields - convert NULL placeholders to empty strings
+            # Handle empty fields - convert NULL placeholders to appropriate defaults
             [[ "$src" == "NULL" || "$src" == "null" || -z "$src" ]] && src=""
             [[ "$dst" == "NULL" || "$dst" == "null" || -z "$dst" ]] && dst=""
             [[ "$proto" == "NULL" || "$proto" == "null" || -z "$proto" ]] && proto=""
-            [[ "$txBytes" == "NULL" || "$txBytes" == "null" || -z "$txBytes" ]] && txBytes=""
-            [[ "$rxBytes" == "NULL" || "$rxBytes" == "null" || -z "$rxBytes" ]] && rxBytes=""
+            [[ "$txBytes" == "NULL" || "$txBytes" == "null" || -z "$txBytes" ]] && txBytes="0"
+            [[ "$rxBytes" == "NULL" || "$rxBytes" == "null" || -z "$rxBytes" ]] && rxBytes="0"
             
-            # Split src into IP and port
+            # Split src into IP and port (handle IPv6 [ip]:port format)
             if [[ -n "$src" ]]; then
-                src_ip="${src%:*}"
-                src_port="${src##*:}"
-                if [[ "$src_ip" == "$src_port" ]]; then
-                    # No port separator found
+                if [[ "$src" =~ ^\[.*\]:[0-9]+$ ]]; then
+                    # IPv6 format: [ipv6]:port
+                    src_ip="${src%:*}"
+                    src_port="${src##*:}"
+                elif [[ "$src" =~ ^[^:]*:[0-9]+$ ]]; then
+                    # IPv4 format: ipv4:port
+                    src_ip="${src%:*}"
+                    src_port="${src##*:}"
+                else
+                    # No port or IPv6 without port
+                    src_ip="$src"
                     src_port=""
                 fi
             else
@@ -348,12 +497,19 @@ format_full_output() {
                 src_port=""
             fi
             
-            # Split dst into IP and port
+            # Split dst into IP and port (handle IPv6 [ip]:port format)
             if [[ -n "$dst" ]]; then
-                dst_ip="${dst%:*}"
-                dst_port="${dst##*:}"
-                if [[ "$dst_ip" == "$dst_port" ]]; then
-                    # No port separator found
+                if [[ "$dst" =~ ^\[.*\]:[0-9]+$ ]]; then
+                    # IPv6 format: [ipv6]:port
+                    dst_ip="${dst%:*}"
+                    dst_port="${dst##*:}"
+                elif [[ "$dst" =~ ^[^:]*:[0-9]+$ ]]; then
+                    # IPv4 format: ipv4:port
+                    dst_ip="${dst%:*}"
+                    dst_port="${dst##*:}"
+                else
+                    # No port or IPv6 without port
+                    dst_ip="$dst"
                     dst_port=""
                 fi
             else
@@ -361,18 +517,61 @@ format_full_output() {
                 dst_port=""
             fi
             
+            # Apply source/destination filtering at flow level
+            if [[ -n "$FILTER_SRC" ]]; then
+                # Check if source matches filter (IP, machine name, or partial match)
+                local src_matches=false
+                local resolved_src_ip=$(resolve_machine_name_to_ip "$FILTER_SRC" "$ip_name_mapping")
+                
+                if [[ "$src" == *"$FILTER_SRC"* ]] || [[ "$src_ip" == *"$FILTER_SRC"* ]]; then
+                    src_matches=true
+                elif [[ -n "$resolved_src_ip" ]] && ([[ "$src" == *"$resolved_src_ip"* ]] || [[ "$src_ip" == *"$resolved_src_ip"* ]]); then
+                    src_matches=true
+                fi
+                
+                if [[ "$src_matches" != "true" ]]; then
+                    continue
+                fi
+            fi
+            
+            if [[ -n "$FILTER_DST" ]]; then
+                # Check if destination matches filter (IP, machine name, or partial match)
+                local dst_matches=false
+                local resolved_dst_ip=$(resolve_machine_name_to_ip "$FILTER_DST" "$ip_name_mapping")
+                
+                if [[ "$dst" == *"$FILTER_DST"* ]] || [[ "$dst_ip" == *"$FILTER_DST"* ]]; then
+                    dst_matches=true
+                elif [[ -n "$resolved_dst_ip" ]] && ([[ "$dst" == *"$resolved_dst_ip"* ]] || [[ "$dst_ip" == *"$resolved_dst_ip"* ]]); then
+                    dst_matches=true
+                fi
+                
+                if [[ "$dst_matches" != "true" ]]; then
+                    continue
+                fi
+            fi
+            
             # Resolve Tailscale IPs (100.x.x.x) to machine names
             if [[ "$src_ip" =~ ^100\. ]]; then
                 resolved_name=$(lookup_machine_name "$src_ip" "$ip_name_mapping")
                 if [[ "$resolved_name" != "$src_ip" ]]; then
-                    src_ip="$resolved_name"
+                    # Truncate long hostnames to fit column (42 chars max + ellipsis if needed)
+                    if [[ ${#resolved_name} -gt 42 ]]; then
+                        src_ip="${resolved_name:0:39}..."
+                    else
+                        src_ip="$resolved_name"
+                    fi
                 fi
             fi
             
             if [[ "$dst_ip" =~ ^100\. ]]; then
                 resolved_name=$(lookup_machine_name "$dst_ip" "$ip_name_mapping")
                 if [[ "$resolved_name" != "$dst_ip" ]]; then
-                    dst_ip="$resolved_name"
+                    # Truncate long hostnames to fit column (27 chars max + ellipsis if needed)
+                    if [[ ${#resolved_name} -gt 42 ]]; then
+                        dst_ip="${resolved_name:0:39}..."
+                    else
+                        dst_ip="$resolved_name"
+                    fi
                 fi
             fi
             
@@ -387,34 +586,168 @@ format_full_output() {
             # Convert protocol number to name
             proto_name=$(get_protocol_name "$proto")
             
-            # Format with proper column alignment
-            printf "%-8s %-20s %-8s %-20s %-8s %-8s %-5s %-8s %s\n" \
+            # Format with proper column alignment and stream output immediately
+            printf "%-8s %-43s %-8s %-43s %-8s %-8s %-5s %-8s %s\n" \
                 "$formatted_time" "$src_ip" "$src_port" "$dst_ip" "$dst_port" "$type" "$proto_name" "$txBytes" "$rxBytes"
-        done
+            ((line_count++))
+        done < <(echo "$response" | jq -r "$jq_filter")
+        
+        # Add footer header if output is longer than 20 lines
+        if [[ $line_count -gt 20 ]]; then
+            echo "--------|-------------------------------------------|--------|-------------------------------------------|--------|--------|-----|--------|-------"
+            echo "Time     Src IP                                      SPort    Dst IP                                      DPort    Type     Proto TxBytes  RxBytes"
+        fi
     else
-        echo "jq is required for full formatting. Install jq or use --format json"
+        echo "jq is required for table formatting. Install jq or use --format json"
         exit 1
+    fi
+}
+
+format_bytes() {
+    local bytes="$1"
+    if [[ -z "$bytes" || "$bytes" == "null" || "$bytes" == "0" ]]; then
+        echo "0 B"
+        return
+    fi
+    
+    if command -v bc >/dev/null 2>&1; then
+        # Use bc for precise decimal arithmetic
+        if (( bytes >= 1073741824 )); then
+            printf "%.1f GB" "$(echo "scale=1; $bytes / 1073741824" | bc)"
+        elif (( bytes >= 1048576 )); then
+            printf "%.1f MB" "$(echo "scale=1; $bytes / 1048576" | bc)"
+        elif (( bytes >= 1024 )); then
+            printf "%.1f KB" "$(echo "scale=1; $bytes / 1024" | bc)"
+        else
+            printf "%d B" "$bytes"
+        fi
+    else
+        # Fallback to integer arithmetic
+        local -i num_bytes=$bytes
+        if (( num_bytes >= 1073741824 )); then
+            printf "%d GB" "$(( num_bytes / 1073741824 ))"
+        elif (( num_bytes >= 1048576 )); then
+            printf "%d MB" "$(( num_bytes / 1048576 ))"
+        elif (( num_bytes >= 1024 )); then
+            printf "%d KB" "$(( num_bytes / 1024 ))"
+        else
+            printf "%d B" "$num_bytes"
+        fi
     fi
 }
 
 show_summary() {
     local response="$1"
+    local ip_name_mapping="$2"
     if command -v jq >/dev/null 2>&1; then
         local total_logs=$(echo "$response" | jq -r '.logs | length')
         local unique_nodes=$(echo "$response" | jq -r '[.logs[]?.nodeId] | unique | length')
         local traffic_types=$(echo "$response" | jq -r '[.logs[] | keys[] | select(. | contains("Traffic"))] | unique | join(", ")')
         
-        echo "=== Summary ==="
+        echo "=== Traffic Summary ==="
         echo "Total log entries: $total_logs"
         echo "Unique nodes: $unique_nodes"
         echo "Traffic types found: ${traffic_types:-none}"
+        echo ""
         
         if [[ $total_logs -gt 0 ]]; then
-            echo ""
-            echo "Nodes breakdown:"
-            echo "$response" | jq -r '.logs[]?.nodeId' | sort | uniq -c | sort -nr | while read -r count node; do
-                printf "  %-32s: %s entries\n" "$node" "$count"
+            # Create comprehensive per-machine statistics using jq to aggregate by resolved machine names
+            echo "Machine Activity Summary:"
+            printf "%-31s | %7s | %10s | %10s | %7s | %7s | %7s | %8s\n" "Machine Name" "Entries" "TX Bytes" "RX Bytes" "Virtual" "Subnet" "Exit" "Physical"
+            printf "%-31s | %7s | %10s | %10s | %7s | %7s | %7s | %8s\n" "-------------------------------" "-------" "----------" "----------" "-------" "-------" "-------" "--------"
+            
+            # Use jq to create machine summary with aggregation
+            echo "$response" | jq -r --arg ip_mapping "$ip_name_mapping" '
+                # First, create a lookup function for machine names
+                ($ip_mapping | split("\n") | map(select(length > 0) | split(":")) | map({(.[0]): .[1]}) | add) as $machine_lookup |
+                
+                # Process each log entry to get per-nodeId stats with resolved machine names
+                [.logs[] | . as $log | {
+                    nodeId: .nodeId,
+                    entries: 1,
+                    tx_bytes: ((.virtualTraffic[]?.txBytes // 0) + (.exitTraffic[]?.txBytes // 0) + (.subnetTraffic[]?.txBytes // 0) + (.physicalTraffic[]?.txBytes // 0)),
+                    rx_bytes: ((.virtualTraffic[]?.rxBytes // 0) + (.exitTraffic[]?.rxBytes // 0) + (.subnetTraffic[]?.rxBytes // 0) + (.physicalTraffic[]?.rxBytes // 0)),
+                    has_virtual: ((.virtualTraffic | length) > 0),
+                    has_subnet: ((.subnetTraffic | length) > 0), 
+                    has_exit: ((.exitTraffic | length) > 0),
+                    has_physical: ((.physicalTraffic | length) > 0),
+                    # Extract Tailscale IP from traffic for machine name resolution
+                    tailscale_ip: ([(.virtualTraffic[]?, .exitTraffic[]?, .subnetTraffic[]?, .physicalTraffic[]?) | [.src, .dst] | .[] | select(. and startswith("100.")) | split(":")[0]] | .[0])
+                }] |
+                
+                # Group by nodeId and aggregate
+                group_by(.nodeId) | map({
+                    nodeId: .[0].nodeId,
+                    entries: (map(.entries) | add),
+                    total_tx: (map(.tx_bytes) | add),
+                    total_rx: (map(.rx_bytes) | add),
+                    has_virtual: (map(.has_virtual) | any),
+                    has_subnet: (map(.has_subnet) | any),
+                    has_exit: (map(.has_exit) | any),
+                    has_physical: (map(.has_physical) | any),
+                    tailscale_ip: (map(.tailscale_ip) | map(select(. != null)) | .[0])
+                }) |
+                
+                # Resolve machine names and aggregate by machine name
+                map(. + {
+                    machine_name: (
+                        if .tailscale_ip then
+                            ($machine_lookup[.tailscale_ip] // .tailscale_ip | gsub("\\.tail[0-9]+\\.ts\\.net$"; "") | .[0:30])
+                        else
+                            (.nodeId | .[0:15])
+                        end
+                    )
+                }) |
+                
+                # Final aggregation by machine name
+                group_by(.machine_name) | map({
+                    machine_name: .[0].machine_name,
+                    entries: (map(.entries) | add),
+                    total_tx: (map(.total_tx) | add),
+                    total_rx: (map(.total_rx) | add),
+                    has_virtual: (map(.has_virtual) | any),
+                    has_subnet: (map(.has_subnet) | any),
+                    has_exit: (map(.has_exit) | any),
+                    has_physical: (map(.has_physical) | any)
+                }) |
+                
+                # Sort by entries count (descending) and output
+                sort_by(-.entries)[] |
+                
+                # Format output
+                [
+                    .machine_name,
+                    (.entries | tostring),
+                    (.total_tx | tostring),
+                    (.total_rx | tostring),
+                    (if .has_virtual then "   ✓   " else "       " end),
+                    (if .has_subnet then "   ✓   " else "       " end),
+                    (if .has_exit then "   ✓   " else "       " end),
+                    (if .has_physical then "   ✓   " else "        " end)
+                ] | @tsv
+            ' | while IFS=$'\t' read -r machine_name entries total_tx total_rx virtual_ind subnet_ind exit_ind physical_ind; do
+                # Format bytes with appropriate units
+                local tx_formatted=$(format_bytes "$total_tx")
+                local rx_formatted=$(format_bytes "$total_rx")
+                
+                # Output with proper column alignment  
+                printf "%-31s | %7s | %10s | %10s | %7s | %7s | %7s | %8s\n" \
+                       "$machine_name" \
+                       "$entries" \
+                       "$tx_formatted" \
+                       "$rx_formatted" \
+                       "$virtual_ind" \
+                       "$subnet_ind" \
+                       "$exit_ind" \
+                       "$physical_ind"
             done
+            
+            echo ""
+            echo "Traffic Types:"
+            echo "  Virtual  - Direct Tailscale-to-Tailscale communication"
+            echo "  Subnet   - Traffic to/from subnet routes"
+            echo "  Exit     - Traffic through exit nodes to external internet"  
+            echo "  Physical - Underlying physical network communication"
         fi
     else
         echo "jq is required for summary. Install jq or use --format json"
@@ -424,14 +757,64 @@ show_summary() {
 
 filter_logs() {
     local response="$1"
+    local ip_name_mapping="$2"
     local filtered="$response"
     
     if [[ -n "$FILTER_TYPE" ]] && command -v jq >/dev/null 2>&1; then
         filtered=$(echo "$filtered" | jq --arg type "$FILTER_TYPE" '.logs |= map(select(.[$type + "Traffic"] != null))')
     fi
     
-    if [[ -n "$FILTER_NODE" ]] && command -v jq >/dev/null 2>&1; then
-        filtered=$(echo "$filtered" | jq --arg node "$FILTER_NODE" '.logs |= map(select(.nodeId == $node))')
+    # Source/destination filtering
+    if [[ -n "$FILTER_SRC" || -n "$FILTER_DST" ]] && command -v jq >/dev/null 2>&1; then
+        local filter_conditions=()
+        
+        if [[ -n "$FILTER_SRC" ]]; then
+            # Try to resolve machine name to IP
+            local resolved_ip=$(resolve_machine_name_to_ip "$FILTER_SRC" "$ip_name_mapping")
+            
+            # Create filter that matches both original filter and resolved IP (if found)
+            local src_patterns="\"$FILTER_SRC\""
+            if [[ -n "$resolved_ip" ]]; then
+                src_patterns+=", \"$resolved_ip\""
+            fi
+            
+            filter_conditions+=("(
+                (.virtualTraffic[]? | .src | . as \$src | [$src_patterns] | any(. as \$pattern | \$src | contains(\$pattern))) or
+                (.subnetTraffic[]? | .src | . as \$src | [$src_patterns] | any(. as \$pattern | \$src | contains(\$pattern))) or
+                (.exitTraffic[]? | .src | . as \$src | [$src_patterns] | any(. as \$pattern | \$src | contains(\$pattern))) or
+                (.physicalTraffic[]? | .src | . as \$src | [$src_patterns] | any(. as \$pattern | \$src | contains(\$pattern))) or
+                (.nodeId | contains(\"$FILTER_SRC\"))
+            )")
+        fi
+        
+        if [[ -n "$FILTER_DST" ]]; then
+            # Try to resolve machine name to IP
+            local resolved_ip=$(resolve_machine_name_to_ip "$FILTER_DST" "$ip_name_mapping")
+            
+            # Create filter that matches both original filter and resolved IP (if found)
+            local dst_patterns="\"$FILTER_DST\""
+            if [[ -n "$resolved_ip" ]]; then
+                dst_patterns+=", \"$resolved_ip\""
+            fi
+            
+            filter_conditions+=("(
+                (.virtualTraffic[]? | .dst | . as \$dst | [$dst_patterns] | any(. as \$pattern | \$dst | contains(\$pattern))) or
+                (.subnetTraffic[]? | .dst | . as \$dst | [$dst_patterns] | any(. as \$pattern | \$dst | contains(\$pattern))) or
+                (.exitTraffic[]? | .dst | . as \$dst | [$dst_patterns] | any(. as \$pattern | \$dst | contains(\$pattern))) or
+                (.physicalTraffic[]? | .dst | . as \$dst | [$dst_patterns] | any(. as \$pattern | \$dst | contains(\$pattern)))
+            )")
+        fi
+        
+        # Combine conditions with AND logic
+        local combined_filter
+        if [[ ${#filter_conditions[@]} -eq 1 ]]; then
+            combined_filter="${filter_conditions[0]}"
+        else
+            combined_filter=$(printf " and %s" "${filter_conditions[@]}")
+            combined_filter="${combined_filter:5}" # Remove leading " and "
+        fi
+        
+        filtered=$(echo "$filtered" | jq ".logs |= map(select($combined_filter))")
     fi
     
     echo "$filtered"
@@ -485,6 +868,60 @@ lookup_machine_name() {
         echo "$ip"
     fi
 }
+
+resolve_machine_name_to_ip() {
+    local machine_name="$1"
+    local mapping="$2"
+    
+    # Strip potential tailnet suffix from input for matching
+    local clean_name=$(echo "$machine_name" | sed 's/\.tail[0-9]*\.ts\.net$//')
+    
+    # Look for the machine name in the mapping and return the IP
+    local ip=$(echo "$mapping" | grep ":.*$clean_name" | head -1 | cut -d: -f1)
+    if [[ -n "$ip" ]]; then
+        echo "$ip"
+    else
+        # Return empty if not found
+        echo ""
+    fi
+}
+
+show_filtering_info() {
+    local ip_name_mapping="$1"
+    
+    if [[ -n "$FILTER_SRC" || -n "$FILTER_DST" ]]; then
+        echo "# Filtering criteria:"
+        
+        if [[ -n "$FILTER_SRC" ]]; then
+            local resolved_src_ip=$(resolve_machine_name_to_ip "$FILTER_SRC" "$ip_name_mapping")
+            local src_criteria="source matching '$FILTER_SRC'"
+            
+            if [[ -n "$resolved_src_ip" ]]; then
+                src_criteria+=", '${resolved_src_ip}', or partial matches"
+            else
+                src_criteria+=", IP addresses, or partial matches"
+            fi
+            
+            echo "# - Showing flows with $src_criteria"
+        fi
+        
+        if [[ -n "$FILTER_DST" ]]; then
+            local resolved_dst_ip=$(resolve_machine_name_to_ip "$FILTER_DST" "$ip_name_mapping")
+            local dst_criteria="destination matching '$FILTER_DST'"
+            
+            if [[ -n "$resolved_dst_ip" ]]; then
+                dst_criteria+=", '${resolved_dst_ip}', or partial matches"
+            else
+                dst_criteria+=", IP addresses, or partial matches"
+            fi
+            
+            echo "# - Showing flows with $dst_criteria"
+        fi
+        
+        echo "#"
+    fi
+}
+
 
 fetch_logs() {
     local api_token
@@ -543,7 +980,7 @@ main() {
                     virtual|subnet|exit|physical)
                         FILTER_TYPE="$2"
                         ;;
-                    table|json|raw|compact|full)
+                    table|json|raw|compact)
                         echo "Error: '$2' is an output format, not a traffic type." >&2
                         echo "Use: -f $2 (for format) instead of -t $2" >&2
                         echo "Valid traffic types for -t: virtual, subnet, exit, physical" >&2
@@ -557,8 +994,12 @@ main() {
                 esac
                 shift 2
                 ;;
-            --filter-node|-n)
-                FILTER_NODE="$2"
+            --src|-S)
+                FILTER_SRC="$2"
+                shift 2
+                ;;
+            --dst|-D)
+                FILTER_DST="$2"
                 shift 2
                 ;;
             --tailnet|-T)
@@ -581,11 +1022,11 @@ main() {
                 minutes="$2"
                 shift 2
                 ;;
-            --since|-S)
+            --since)
                 since="$2"
                 shift 2
                 ;;
-            --until|-U)
+            --until)
                 until="$2"
                 shift 2
                 ;;
@@ -668,14 +1109,14 @@ main() {
         exit 1
     fi
     
-    if [[ "$OUTPUT_FORMAT" != "json" && "$OUTPUT_FORMAT" != "table" && "$OUTPUT_FORMAT" != "raw" && "$OUTPUT_FORMAT" != "compact" && "$OUTPUT_FORMAT" != "full" ]]; then
-        echo "Error: Invalid output format. Use: json, table, raw, compact, or full" >&2
+    if [[ "$OUTPUT_FORMAT" != "json" && "$OUTPUT_FORMAT" != "table" && "$OUTPUT_FORMAT" != "raw" && "$OUTPUT_FORMAT" != "compact" ]]; then
+        echo "Error: Invalid output format. Use: json, table, raw, or compact" >&2
         exit 1
     fi
     
-    # Fetch device information for machine name mapping (for table, compact, and full formats)
+    # Fetch device information for machine name mapping (needed for table/compact formats, summary, and src/dst filtering)
     local ip_name_mapping=""
-    if [[ "$OUTPUT_FORMAT" == "table" || "$OUTPUT_FORMAT" == "compact" || "$OUTPUT_FORMAT" == "full" ]]; then
+    if [[ "$OUTPUT_FORMAT" == "table" || "$OUTPUT_FORMAT" == "compact" || "$show_summary" == true || -n "$FILTER_SRC" || -n "$FILTER_DST" ]]; then
         local devices_response
         devices_response=$(fetch_devices)
         ip_name_mapping=$(create_ip_name_mapping "$devices_response")
@@ -685,21 +1126,21 @@ main() {
     response=$(fetch_logs)
     
     local filtered_response
-    # Don't apply log-level filtering for full format since it handles filtering internally
-    if [[ "$OUTPUT_FORMAT" == "full" ]]; then
-        filtered_response="$response"
+    # Apply filtering for formats that don't handle it internally - table and compact handle flow-level filtering internally
+    # Summary also needs pre-filtered data when using src/dst filters
+    if [[ ( "$OUTPUT_FORMAT" != "table" && "$OUTPUT_FORMAT" != "compact" && ( -n "$FILTER_SRC" || -n "$FILTER_DST" || -n "$FILTER_TYPE" ) ) || 
+          ( "$show_summary" == true && ( -n "$FILTER_SRC" || -n "$FILTER_DST" ) ) ]]; then
+        filtered_response=$(filter_logs "$response" "$ip_name_mapping")
     else
-        filtered_response=$(filter_logs "$response")
+        filtered_response="$response"
     fi
     
     if [[ "$show_summary" == true ]]; then
-        show_summary "$filtered_response"
+        show_summary "$filtered_response" "$ip_name_mapping"
     elif [[ "$OUTPUT_FORMAT" == "table" ]]; then
         format_table_output "$filtered_response" "$ip_name_mapping"
     elif [[ "$OUTPUT_FORMAT" == "compact" ]]; then
         format_compact_output "$filtered_response" "$ip_name_mapping"
-    elif [[ "$OUTPUT_FORMAT" == "full" ]]; then
-        format_full_output "$filtered_response" "$ip_name_mapping"
     elif [[ "$OUTPUT_FORMAT" == "json" ]]; then
         format_json_output "$filtered_response"
     else

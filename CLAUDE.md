@@ -20,18 +20,27 @@ The utility has been comprehensively tested with the following results:
 ### ✅ Core Features Verified
 - **Help System**: Comprehensive help with clear examples
 - **Configuration Management**: .env file support with helpful error messages
-- **Output Formats**: Table, JSON, raw, and enhanced full format all working
+- **Output Formats**: Table (detailed flows), compact (simplified), JSON, and raw formats all working
 - **Traffic Filtering**: Flow-level filtering for exit, subnet, physical, and virtual traffic
 - **Time Range Options**: Minutes, hours, and other time range options working
 - **Error Handling**: Helpful error messages that guide users to solutions
 
 ### ✅ Enhanced Features Working
-- **Full Format**: Separate port columns (src-ip, src-port, dst-ip, dst-port)
+- **Table Format (Default)**: Detailed flows with separate port columns (src-ip, src-port, dst-ip, dst-port, type, proto, txBytes, rxBytes)
+- **Compact Format**: Simplified 4-column view (time, src-ip, dst-ip, type)
+- **Enhanced Summary Format**: Comprehensive machine activity overview with aggregated statistics
+- **Source/Destination Filtering**: Filter by machine name, IP address, or node ID with flow-level precision
+- **IPv6 Support**: Full support for IPv6 addresses with proper column alignment
 - **Service Name Resolution**: Common ports show as readable names (dhcpc, dhcps, prom, ntp, etc.)
-- **Machine Name Resolution**: Tailscale IPs (100.x.x.x) resolve to readable machine names
+- **Machine Name Resolution**: Tailscale IPs (100.x.x.x) resolve to readable machine names with fallback to IPs
 - **Smart Error Messages**: Format/traffic type confusion now shows helpful guidance
+- **Filtering Explanations**: Shows what criteria will be matched when using source/destination filters
+- **Footer Headers**: Automatic header repetition for outputs longer than 20 lines
+- **Streaming Output**: Real-time display as data is processed
 - **5-Character Service Names**: All service names limited for clean column alignment
 - **Local Timestamps**: Time shown in local timezone as HH:MM:SS format
+- **Perfect Column Alignment**: All table formats have properly aligned headers and data
+- **Missing Byte Values**: Proper handling of missing TX/RX bytes (shows 0 instead of blank)
 
 ### 🎯 Original Issue Resolved
 The specific issue `./ts-logs -m 5 -t raw` now shows:
@@ -58,9 +67,10 @@ Valid traffic types for -t: virtual, subnet, exit, physical
 ./ts-logs --help
 
 # Most common usage patterns
-./ts-logs -m 5          # Last 5 minutes in table format
-./ts-logs -m 5 -f full  # Last 5 minutes with detailed flows
-./ts-logs -t exit -f full -H 2  # Exit traffic details from last 2 hours
+./ts-logs -m 5          # Last 5 minutes in detailed table format
+./ts-logs -m 5 -f compact  # Last 5 minutes in simplified view
+./ts-logs -m 5 -s       # Last 5 minutes machine activity summary
+./ts-logs -t exit -H 2  # Exit traffic details from last 2 hours
 ```
 
 ### Time Range Options
@@ -71,7 +81,7 @@ Valid traffic types for -t: virtual, subnet, exit, physical
 ./ts-logs -d 3          # Last 3 days
 
 # Specific time range
-./ts-logs -S 2025-08-28T00:00:00Z -U 2025-08-28T23:59:59Z
+./ts-logs --since 2025-08-28T00:00:00Z --until 2025-08-28T23:59:59Z
 
 # Convenient shortcuts
 ./ts-logs --today
@@ -80,43 +90,50 @@ Valid traffic types for -t: virtual, subnet, exit, physical
 
 ### Output Formatting
 ```bash
-# Table format with machine names (default)
-./ts-logs --format table --hours 12
+# Table format - detailed flows with all columns (default)
+./ts-logs -H 12
 
-# Compact format - one line per entry
-./ts-logs --format compact --hours 6
-
-# Full format - detailed traffic flows with separate port columns
-./ts-logs --format full --hours 2
+# Compact format - simplified 4-column view
+./ts-logs -f compact -H 6
 
 # Pretty JSON (requires jq or python3)
-./ts-logs --format json --days 1
+./ts-logs -f json -d 1
 
 # Raw JSON output
-./ts-logs --format raw
+./ts-logs -f raw
 
 # Summary statistics only
-./ts-logs --summary --days 7
+./ts-logs -s -d 7
 ```
 
-### Filtering and Machine Names
+### Filtering Options
 ```bash
-# Filter by traffic type with short options
-./ts-logs -t virtual -f table -H 24
-./ts-logs -t subnet -f full --today
-./ts-logs -t exit -f full --today
-./ts-logs -t physical -f table -H 6
+# Filter by traffic type
+./ts-logs -t virtual -H 24
+./ts-logs -t subnet --today
+./ts-logs -t exit --today
+./ts-logs -t physical -H 6
 
-# Filter by node ID
-./ts-logs -n "node123" -d 2
+# Filter by source (machine name, IP, or partial match)
+./ts-logs -S alex-mac1 -H 2
+./ts-logs -S 100.64.0.1 -m 10
+./ts-logs -S fd7a:115c:a1e0:ab12:4843:cd96:6267:4579 -m 5
 
-# View exit traffic with detailed breakdown (most useful for troubleshooting)
-./ts-logs -t exit -f full -H 6
+# Filter by destination
+./ts-logs -D 192.168.1 -H 1
+./ts-logs -D server -m 30
 
-# Recent activity analysis
-./ts-logs -m 15 -f table
-./ts-logs -m 5 -t exit -f full
-./ts-logs -m 1 -t subnet -f full
+# Combine filters
+./ts-logs -S laptop-work -D 192.168.1 -t exit -H 1
+
+# Combined filtering with summary analysis
+./ts-logs -S alex-mac1 -t exit -s -H 6   # Alex's exit traffic summary
+./ts-logs -D server -t virtual -s --today # Virtual traffic to server summary
+
+# Recent activity analysis  
+./ts-logs -m 15 -s          # 15-minute machine activity summary
+./ts-logs -m 5 -t exit      # Recent exit traffic details
+./ts-logs -m 1 -t subnet -f compact  # Recent subnet activity
 ```
 
 ### Make Script Executable
@@ -126,16 +143,40 @@ chmod +x ts-logs
 
 ## Key Features
 
-### Enhanced Full Format (New!)
-- **Separate port columns**: `Src IP`, `SPort`, `Dst IP`, `DPort` for better readability
+### Enhanced Summary Format (`--summary` or `-s`)
+- **Machine-centric analysis**: Groups all activity by resolved machine names instead of nodeIDs
+- **Comprehensive statistics**: Shows entries count, total TX/RX bytes, and traffic type participation
+- **Perfect aggregation**: Multiple nodeIDs for the same machine are combined correctly
+- **Traffic type indicators**: Visual checkmarks (✓) show which traffic types each machine participates in
+- **Human-readable bytes**: Automatic formatting with appropriate units (GB, MB, KB, B)
+- **Activity-based sorting**: Most active machines appear first
+- **Respects all filters**: Works with source (-S), destination (-D), and traffic type (-t) filtering
+- **Perfect table alignment**: All columns properly aligned with headers
+- **Machine name resolution**: NodeIDs resolve to readable names with IP fallback when names unavailable
+
+### Enhanced Table Format (Default)
+- **Detailed flow information**: `Time`, `Src IP`, `SPort`, `Dst IP`, `DPort`, `Type`, `Proto`, `TxBytes`, `RxBytes`
+- **IPv6 support**: Full support for IPv6 addresses with proper column alignment (43-character width)
 - **Service name resolution**: Common ports show as service names (e.g., `80` → `http`, `443` → `https`, `9100` → `prom`)
 - **Tailscale IP resolution**: `100.x.x.x` addresses resolve to machine names in all formats
+- **Missing data handling**: Shows `0` for missing TX/RX bytes instead of blank columns
 - **Traffic flow-level filtering**: Filter by traffic type shows only relevant flows, not entire log entries
 - **Short service names**: All service names limited to 5 characters maximum for clean output
 - **Local timestamp format**: Time shown as `HH:MM:SS` in local timezone
+- **Perfect column alignment**: Headers and data properly aligned with consistent spacing
+- **Footer headers**: Headers repeated at bottom for outputs longer than 20 lines
+
+### Source/Destination Filtering
+- **Machine name filtering**: `--src alex-mac1` or `-S alex-mac1`
+- **IP address filtering**: `--src 100.64.0.1` or IPv6 `--src fd7a:115c:...`
+- **Partial matching**: `--src alex` matches any source containing "alex"
+- **Node ID filtering**: Filter by Tailscale node IDs
+- **Combined filtering**: Use both `--src` and `--dst` together
+- **Flow-level precision**: Filtering works on individual flows, not entire log entries
+- **Filtering explanations**: Shows what criteria will be matched before output
 
 ### Machine Name Resolution
-- **Universal IP resolution**: Table, compact, and full formats resolve Tailscale IPs to machine names
+- **Universal IP resolution**: Table and compact formats resolve Tailscale IPs to machine names
 - **Automatic tailnet suffix stripping**: Machine names like `server.tail43508.ts.net` are displayed as just `server`
 - **Fallback to IP addresses**: If machine name lookup fails, displays the Tailscale IP address
 - **API integration**: Uses Tailscale's `/devices` API endpoint to map IP addresses to machine names
@@ -148,38 +189,72 @@ chmod +x ts-logs
 
 ### Command Line Interface
 - **Default help behavior**: Running `ts-logs` without arguments shows help
-- **Short option support**: All options have single-letter shortcuts (`-m`, `-H`, `-d`, `-f`, `-t`, etc.)
-- **Default table format**: Clean, readable output by default
+- **Short option support**: Most options have single-letter shortcuts (`-m`, `-H`, `-d`, `-f`, `-t`, `-S`, `-D`)
+- **Time options**: `--since` and `--until` use long-form only (no `-S`, `-U` shortcuts)
+- **Default table format**: Detailed flow information by default
 - **Flexible time ranges**: Minutes, hours, days, or specific time ranges
+- **Streaming output**: Results appear in real-time as they're processed
 
 ## Example Output
 
-### Exit Traffic Full Format (Most Detailed)
+### Enhanced Summary Format
 ```
-Time     Src IP               SPort    Dst IP               DPort    Type     Proto TxBytes  RxBytes
-----------------------------------------------------------------------------------------------------
-14:32:16 skep6                dhcpc    192.168.178.1        dhcps    exit     UDP   328      
-14:32:20 rgbeast              35832    185.125.190.98       http     exit     TCP   60       
-14:32:24 orin-dev             59738    91.189.91.96         http     exit     TCP   180      
-14:32:28 laptop-work          49672    192.168.178.1        dns      exit     TCP   120      
+=== Traffic Summary ===
+Total log entries: 37
+Unique nodes: 5
+Traffic types found: exitTraffic, physicalTraffic, virtualTraffic
+
+Machine Activity Summary:
+Machine Name                    | Entries |   TX Bytes |   RX Bytes | Virtual |  Subnet |    Exit | Physical
+------------------------------- | ------- | ---------- | ---------- | ------- | ------- | ------- | --------
+dusans-macbook-pro              |      37 |   525.6 KB |     8.1 KB |    ✓    |         |         |    ✓   
+alex-mac1                       |      12 |    29.1 KB |    17.0 KB |    ✓    |         |    ✓    |    ✓   
+rgbeast                         |       8 |     1.0 KB |        0 B |         |         |    ✓    |         
+orin-dev                        |       6 |      600 B |        0 B |         |         |    ✓    |         
+100.103.69.121                  |       2 |      420 B |      156 B |         |         |    ✓    |    ✓   
+
+Traffic Types:
+  Virtual  - Direct Tailscale-to-Tailscale communication
+  Subnet   - Traffic to/from subnet routes
+  Exit     - Traffic through exit nodes to external internet
+  Physical - Underlying physical network communication
 ```
 
-### Subnet Traffic Analysis
+### Table Format (Default) - Exit Traffic
 ```
-Time     Src IP               SPort    Dst IP               DPort    Type     Proto TxBytes  RxBytes
-----------------------------------------------------------------------------------------------------
-14:31:36 172.17.0.1           prom     10.123.123.13        37252    subnet   TCP   300      
-14:31:43 172.17.0.1           8005     10.123.123.13        32838    subnet   TCP   60       
-14:31:46 172.17.0.1           5557     10.123.123.29        33630    subnet   TCP   180      
+# Filtering criteria:
+# - Showing flows with traffic type 'exit'
+#
+Time     Src IP                                      SPort    Dst IP                                      DPort    Type     Proto TxBytes  RxBytes
+--------|-------------------------------------------|--------|-------------------------------------------|--------|--------|-----|--------|-------
+14:32:16 skep6                                       dhcpc    192.168.178.1                               dhcps    exit     UDP   328      
+14:32:20 rgbeast                                     35832    185.125.190.98                              http     exit     TCP   60       
+14:32:24 orin-dev                                    59738    91.189.91.96                                http     exit     TCP   180      
+14:32:28 laptop-work                                 49672    192.168.178.1                               dns      exit     TCP   120      
 ```
 
-### Table Format (Default)
+### Compact Format - Subnet Traffic
 ```
-Timestamp                Machine Name             Traffic Type    Duration
-------------------------------------------------------------------------
-2025-08-29T14:32:04Z     server1                  exit            2025-08-29T14:32:02Z
-2025-08-29T14:32:14Z     rgbeast                  subnet          2025-08-29T14:32:12Z
-2025-08-29T14:32:19Z     laptop-work              physical        2025-08-29T14:32:17Z
+# Filtering criteria:
+# - Showing flows with traffic type 'subnet'
+#
+Time     Src IP                                      Dst IP                                      Type
+--------|-------------------------------------------|-------------------------------------------|--------
+14:31:36 172.17.0.1                                 10.123.123.13                               subnet
+14:31:43 172.17.0.1                                 10.123.123.13                               subnet
+14:31:46 172.17.0.1                                 10.123.123.29                               subnet
+```
+
+### Source Filtering Example
+```
+# Filtering criteria:
+# - Showing flows with source matching 'alex-mac1', '100.64.0.1', or partial matches
+#
+Time     Src IP                                      SPort    Dst IP                                      DPort    Type     Proto TxBytes  RxBytes
+--------|-------------------------------------------|--------|-------------------------------------------|--------|--------|-----|--------|-------
+16:48:54 alex-mac1                                   52036    34.36.57.103                                https    exit     TCP   104      52
+16:49:02 alex-mac1                                   nbns     alex-mac1                                   nbns     virtual  UDP            1044
+16:49:10 alex-mac1                                   51229    173.194.65.188                              5228     exit     TCP   52      
 ```
 
 ### Service Name Examples
@@ -197,32 +272,38 @@ The utility has been verified to work correctly with actual Tailscale network da
 ### Real Output Examples (from testing):
 ```bash
 # Exit traffic shows DHCP and NTP activity
-./ts-logs -m 2 -t exit -f full
-Time     Src IP               SPort    Dst IP               DPort    Type     Proto TxBytes  RxBytes
-----------------------------------------------------------------------------------------------------
-09:51:31 skep6                dhcpc    192.168.178.1        dhcps    exit     UDP   328      
-09:51:31 skep6                45320    192.168.178.1        ntp      exit     UDP   76       
+./ts-logs -m 2 -t exit
+Time     Src IP                                      SPort    Dst IP                                      DPort    Type     Proto TxBytes  RxBytes
+--------|-------------------------------------------|--------|-------------------------------------------|--------|--------|-----|--------|-------
+09:51:31 skep6                                       dhcpc    192.168.178.1                               dhcps    exit     UDP   328      
+09:51:31 skep6                                       45320    192.168.178.1                               ntp      exit     UDP   76       
 
 # Physical traffic shows node-to-node communication  
-./ts-logs -m 1 -t physical -f full
-Time     Src IP               SPort    Dst IP               DPort    Type     Proto TxBytes  RxBytes
-----------------------------------------------------------------------------------------------------
-09:52:26 queen2dev            0        34.77.239.134        41641    physical       672      32
-09:52:25 skep6                0        109.202.219.171      6949     physical       32       576
+./ts-logs -m 1 -t physical
+Time     Src IP                                      SPort    Dst IP                                      DPort    Type     Proto TxBytes  RxBytes
+--------|-------------------------------------------|--------|-------------------------------------------|--------|--------|-----|--------|-------
+09:52:26 queen2dev                                   0        34.77.239.134                               41641    physical       672      32
+09:52:25 skep6                                       0        109.202.219.171                             6949     physical       32       576
 
-# Subnet traffic shows container/internal services
-./ts-logs -m 1 -t subnet -f full  
-Time     Src IP               SPort    Dst IP               DPort    Type     Proto TxBytes  RxBytes
-----------------------------------------------------------------------------------------------------
-09:52:21 172.17.0.1           prom     10.123.123.13        51952    subnet   TCP   300      
-09:52:21 172.17.0.1           8005     10.123.123.13        47520    subnet   TCP   120      
+# Source filtering with IPv6 support
+./ts-logs -m 5 -S fd7a:115c:a1e0:ab12:4843:cd96:6267:4579
+# Filtering criteria:
+# - Showing flows with source matching 'fd7a:115c:a1e0:ab12:4843:cd96:6267:4579', IP addresses, or partial matches
+#
+Time     Src IP                                      SPort    Dst IP                                      DPort    Type     Proto TxBytes  RxBytes
+--------|-------------------------------------------|--------|-------------------------------------------|--------|--------|-----|--------|-------
+13:41:43 [fd7a:115c:a1e0:ab12:4843:cd96:6267:4579]   52044    [2600:1f18:24e6:b902:a46c:a4a6:87fe:c14c]   https    exit     TCP   84      
 ```
 
 All examples show:
 - ✅ Machine name resolution (skep6, queen2dev instead of 100.x.x.x IPs)  
-- ✅ Service name resolution (dhcpc, dhcps, ntp, prom instead of port numbers)
-- ✅ Perfect column alignment with proper spacing
+- ✅ Service name resolution (dhcpc, dhcps, ntp, https instead of port numbers)
+- ✅ IPv6 address support with proper column alignment (43-character width)
+- ✅ Pipe-separated headers for clear column distinction
 - ✅ Traffic filtering working at flow level, not log entry level
+- ✅ Filtering explanations showing what criteria will be matched
+- ✅ Footer headers for long outputs (>20 lines)
+- ✅ Streaming output for real-time results
 
 ## Dependencies
 
