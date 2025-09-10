@@ -1,4 +1,4 @@
-# Tailscale Network Logging Utility
+# Tailscale CLI Network Log Viewer
 
 An enhanced command-line tool for fetching and analyzing Tailscale network logs with flexible filtering, multiple output formats, and intelligent machine name resolution.
 
@@ -46,9 +46,6 @@ An enhanced command-line tool for fetching and analyzing Tailscale network logs 
    
    # Ubuntu/Debian
    sudo apt-get install jq
-   
-   # CentOS/RHEL
-   sudo yum install jq
    ```
 
 4. **Configure API access**:
@@ -134,8 +131,8 @@ TAILNET=your-company.com
 # Filter by source/destination (supports machine names, IPs, node IDs)
 ./ts-logs --src laptop-work -H 2        # Traffic from laptop-work
 ./ts-logs --dst server -m 30            # Traffic to server
-./ts-logs --src 100.64.0.5 -H 1         # Traffic from specific IP
-./ts-logs --dst fd7a:115c:a1e0::1 -m 15 # IPv6 destination filtering
+./ts-logs --src 100.44.1.5 -H 1         # Traffic from specific IP
+./ts-logs --dst fd7a:125c:a0e0::1 -m 15 # IPv6 destination filtering
 ```
 
 ### Advanced Examples
@@ -171,11 +168,11 @@ Traffic types found: exitTraffic, physicalTraffic, virtualTraffic
 Machine Activity Summary:
 Machine Name                    | Entries |   TX Bytes |   RX Bytes | Virtual |  Subnet |    Exit | Physical
 ------------------------------- | ------- | ---------- | ---------- | ------- | ------- | ------- | --------
-dusans-macbook-pro              |      37 |   525.6 KB |     8.1 KB |    ✓    |         |         |    ✓   
-alex-mac1                       |      12 |    29.1 KB |    17.0 KB |    ✓    |         |    ✓    |    ✓   
-rgbeast                         |       8 |     1.0 KB |        0 B |         |         |    ✓    |         
-orin-dev                        |       6 |      600 B |        0 B |         |         |    ✓    |         
-100.103.69.121                  |       2 |      420 B |      156 B |         |         |    ✓    |    ✓   
+macbook-pro                     |      37 |   525.6 KB |     8.1 KB |    ✓    |         |         |    ✓   
+mac1-home                       |      12 |    29.1 KB |    17.0 KB |    ✓    |         |    ✓    |    ✓   
+toaster                         |       8 |     1.0 KB |        0 B |         |         |    ✓    |         
+server-dev                      |       6 |      600 B |        0 B |         |         |    ✓    |         
+100.104.19.161                  |       2 |      420 B |      156 B |         |         |    ✓    |    ✓   
 
 Traffic Types:
   Virtual  - Direct Tailscale-to-Tailscale communication
@@ -192,10 +189,10 @@ Filtering: Source matches 'laptop-work' (machine name, IP, or node ID)
 
 Time     | Src IP              | SPort | Dst IP              | DPort | Type   | Proto | TxBytes | RxBytes
 ---------|--------------------:|------:|--------------------:|------:|--------|-------|--------:|--------:
-14:32:16 | laptop-work         | dhcpc | 192.168.178.1       | dhcps | exit   | UDP   | 328     | 
-14:32:20 | laptop-work         | 35832 | 185.125.190.98      | http  | exit   | TCP   | 60      | 
-14:32:24 | laptop-work         | 59738 | 91.189.91.96        | https | exit   | TCP   | 180     | 
-14:32:28 | laptop-work         | 49672 | 192.168.178.1       | dns   | exit   | TCP   | 120     | 
+14:32:16 | laptop-work         | dhcpc | 192.168.100.1       | dhcps | exit   | UDP   | 328     | 
+14:32:20 | laptop-work         | 35832 | 105.15.190.98       | http  | exit   | TCP   | 60      | 
+14:32:24 | laptop-work         | 59738 | 34.119.91.96        | https | exit   | TCP   | 180     | 
+14:32:28 | laptop-work         | 49672 | 192.168.100.1       | dns   | exit   | TCP   | 120     | 
 
 Time     | Src IP              | SPort | Dst IP              | DPort | Type   | Proto | TxBytes | RxBytes
 ---------|--------------------:|------:|--------------------:|------:|--------|-------|--------:|--------:
@@ -207,9 +204,9 @@ Simplified view for quick analysis:
 ```
 Time     | Src IP              | Dst IP              | Type
 ---------|--------------------:|--------------------:|--------
-14:32:16 | laptop-work         | 192.168.178.1       | exit
-14:32:20 | laptop-work         | 185.125.190.98      | exit
-14:32:24 | laptop-work         | 91.189.91.96        | exit
+14:32:16 | laptop-work         | 192.168.100.1       | exit
+14:32:20 | laptop-work         | 105.15.190.98       | exit
+14:32:24 | laptop-work         | 34.119.91.96        | exit
 ```
 
 ### Service Name Resolution
@@ -372,4 +369,4 @@ For issues, feature requests, or questions:
 
 ---
 
-**Status**: ✅ Production Ready - All core functionality tested and working
+**Status**: ✅ Beta Release - All core functionality tested and working. Accepting bug reports.
