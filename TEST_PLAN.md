@@ -27,6 +27,16 @@ This test plan covers verification of all features in the enhanced Tailscale net
 - [ ] **T012**: `./ts-logs --since 2025-01-01T00:00:00Z --until 2025-01-01T23:59:59Z` (specific range)
 - [ ] **T013**: Invalid date format shows helpful error
 
+#### 2.1 Numeric Validation Tests (Added 2025-09-12)
+- [x] **T013a**: `./ts-logs -m -5` shows validation error (negative values rejected)
+- [x] **T013b**: `./ts-logs -H 0` shows validation error (zero values rejected)
+- [x] **T013c**: `./ts-logs -d 3.5` shows validation error (decimal values rejected)
+- [x] **T013d**: `./ts-logs -m abc` shows validation error (non-numeric rejected)
+- [x] **T013e**: `./ts-logs -H 05` shows validation error (leading zeros rejected)
+- [x] **T013f**: `./ts-logs -m 30` accepts valid positive integers
+- [x] **T013g**: `./ts-logs -H 168` accepts large valid numbers
+- [x] **T013h**: Error messages clearly state "must be a positive integer (1 or greater)"
+
 ### 3. Output Format Tests
 
 #### 3.1 Table Format (Default)

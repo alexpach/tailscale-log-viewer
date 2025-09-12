@@ -104,6 +104,25 @@ validate_date() {
     fi
 }
 
+validate_numeric() {
+    local value="$1"
+    local param_name="$2"
+    
+    # Check if value is empty
+    if [[ -z "$value" ]]; then
+        echo "Error: Invalid value for $param_name: empty value" >&2
+        echo "Value must be a positive integer (1 or greater)" >&2
+        exit 1
+    fi
+    
+    # Check if value is a positive integer (no leading zeros, starts with 1-9)
+    if ! [[ "$value" =~ ^[1-9][0-9]*$ ]]; then
+        echo "Error: Invalid value for $param_name: '$value'" >&2
+        echo "Value must be a positive integer (1 or greater)" >&2
+        exit 1
+    fi
+}
+
 format_date_rfc3339() {
     local date_input="$1"
     if command -v gdate >/dev/null 2>&1; then
@@ -1012,14 +1031,17 @@ main() {
                 ;;
             --hours|-H)
                 hours="$2"
+                validate_numeric "$hours" "--hours"
                 shift 2
                 ;;
             --days|-d)
                 days="$2"
+                validate_numeric "$days" "--days"
                 shift 2
                 ;;
             --minutes|-m)
                 minutes="$2"
+                validate_numeric "$minutes" "--minutes"
                 shift 2
                 ;;
             --since)

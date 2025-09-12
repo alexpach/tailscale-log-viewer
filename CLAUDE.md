@@ -6,6 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 - **GitHub Username**: alexpach
 - **Repository**: tailscale-logging
+- **Last Major Update**: 2025-09-12 - Added numeric validation for time arguments
 
 ## Repository Overview
 
@@ -41,6 +42,7 @@ The utility has been comprehensively tested with the following results:
 - **Local Timestamps**: Time shown in local timezone as HH:MM:SS format
 - **Perfect Column Alignment**: All table formats have properly aligned headers and data
 - **Missing Byte Values**: Proper handling of missing TX/RX bytes (shows 0 instead of blank)
+- **Numeric Input Validation**: Time arguments (-m, -H, -d) validate for positive integers only (Added 2025-09-12)
 
 ### 🎯 Original Issue Resolved
 The specific issue `./ts-logs -m 5 -t raw` now shows:
