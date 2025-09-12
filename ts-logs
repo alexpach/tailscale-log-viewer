@@ -9,8 +9,9 @@ cleanup() {
         debug_log "Script interrupted. Cleaning up..."
     fi
     
-    # Show statistics on exit if requested
-    if [[ "$SHOW_STATS" == true ]] && [[ -n "$PROCESSING_START_TIME" ]]; then
+    # Only show statistics on interrupt/signal, not normal exit
+    # Normal exit will show stats in main()
+    if [[ $exit_code -ne 0 ]] && [[ "$SHOW_STATS" == true ]] && [[ -n "$PROCESSING_START_TIME" ]]; then
         show_statistics
     fi
     
@@ -1199,13 +1200,23 @@ fetch_devices() {
     echo "Fetching device information..." >&2
     
     # Track device fetch time
-    local fetch_start=$(date +%s%3N 2>/dev/null || echo $(($(date +%s) * 1000)))
+    local fetch_start
+    if command -v gdate >/dev/null 2>&1; then
+        fetch_start=$(gdate +%s%3N)
+    else
+        fetch_start=$(($(date +%s) * 1000))
+    fi
     
     local response
     response=$(curl -s -u "$api_token:" "$url")
     local curl_exit=$?
     
-    local fetch_end=$(date +%s%3N 2>/dev/null || echo $(($(date +%s) * 1000)))
+    local fetch_end
+    if command -v gdate >/dev/null 2>&1; then
+        fetch_end=$(gdate +%s%3N)
+    else
+        fetch_end=$(($(date +%s) * 1000))
+    fi
     DEVICE_FETCH_TIME=$((fetch_end - fetch_start))
     debug_log "Device fetch completed in ${DEVICE_FETCH_TIME}ms"
     
@@ -1312,11 +1323,29 @@ fetch_logs() {
     
     local url="https://api.tailscale.com/api/v2/tailnet/${TAILNET}/logging/network?start=${START_TIME}&end=${END_TIME}"
     
+    debug_log "API URL: $url"
     echo "Fetching logs from $START_TIME to $END_TIME..." >&2
+    
+    # Track API fetch time
+    local fetch_start
+    if command -v gdate >/dev/null 2>&1; then
+        fetch_start=$(gdate +%s%3N)
+    else
+        fetch_start=$(($(date +%s) * 1000))
+    fi
     
     local response
     response=$(curl -s -u "$api_token:" "$url")
     local curl_exit=$?
+    
+    local fetch_end
+    if command -v gdate >/dev/null 2>&1; then
+        fetch_end=$(gdate +%s%3N)
+    else
+        fetch_end=$(($(date +%s) * 1000))
+    fi
+    API_FETCH_TIME=$((fetch_end - fetch_start))
+    debug_log "API fetch completed in ${API_FETCH_TIME}ms"
     
     if [[ $curl_exit -ne 0 ]]; then
         echo "Error: Failed to fetch logs from Tailscale API (curl exit code: $curl_exit)" >&2
@@ -1327,6 +1356,12 @@ fetch_logs() {
         echo "Error from Tailscale API:" >&2
         echo "$response" >&2
         exit 1
+    fi
+    
+    # Count total records
+    if command -v jq >/dev/null 2>&1; then
+        TOTAL_RECORDS=$(echo "$response" | jq '.logs | length // 0' 2>/dev/null || echo "0")
+        debug_log "Total records fetched: $TOTAL_RECORDS"
     fi
     
     echo "$response"
@@ -1504,7 +1539,11 @@ main() {
     check_configuration
     
     # Record processing start time
-    PROCESSING_START_TIME=$(date +%s%3N 2>/dev/null || echo $(($(date +%s) * 1000)))
+    if command -v gdate >/dev/null 2>&1; then
+        PROCESSING_START_TIME=$(gdate +%s%3N)
+    else
+        PROCESSING_START_TIME=$(($(date +%s) * 1000))
+    fi
     debug_log "Processing started at $PROCESSING_START_TIME"
     
     # Set time range based on parsed arguments
@@ -1594,7 +1633,11 @@ main() {
     fi
     
     # Record processing end time before output
-    PROCESSING_END_TIME=$(date +%s%3N 2>/dev/null || echo $(($(date +%s) * 1000)))
+    if command -v gdate >/dev/null 2>&1; then
+        PROCESSING_END_TIME=$(gdate +%s%3N)
+    else
+        PROCESSING_END_TIME=$(($(date +%s) * 1000))
+    fi
     debug_log "Processing ended at $PROCESSING_END_TIME"
     
     if [[ "$show_summary" == true ]]; then
