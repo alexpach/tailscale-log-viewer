@@ -126,9 +126,9 @@ Valid traffic types for -t: virtual, subnet, exit, physical
 ./ts-logs -t physical -H 6
 
 # Filter by source (machine name, IP, or partial match)
-./ts-logs -S alex-mac1 -H 2
+./ts-logs -S laptop-work -H 2
 ./ts-logs -S 100.64.0.1 -m 10
-./ts-logs -S fd7a:115c:a1e0:ab12:4843:cd96:6267:4579 -m 5
+./ts-logs -S fd7a:115c:a1e0::1234 -m 5
 
 # Filter by destination
 ./ts-logs -D 192.168.1 -H 1
@@ -138,7 +138,7 @@ Valid traffic types for -t: virtual, subnet, exit, physical
 ./ts-logs -S laptop-work -D 192.168.1 -t exit -H 1
 
 # Combined filtering with summary analysis
-./ts-logs -S alex-mac1 -t exit -s -H 6   # Alex's exit traffic summary
+./ts-logs -S laptop-work -t exit -s -H 6   # Laptop's exit traffic summary
 ./ts-logs -D server -t virtual -s --today # Virtual traffic to server summary
 
 # Recent activity analysis  
@@ -178,9 +178,9 @@ chmod +x ts-logs
 - **Footer headers**: Headers repeated at bottom for outputs longer than 20 lines
 
 ### Source/Destination Filtering
-- **Machine name filtering**: `--src alex-mac1` or `-S alex-mac1`
+- **Machine name filtering**: `--src laptop-work` or `-S laptop-work`
 - **IP address filtering**: `--src 100.64.0.1` or IPv6 `--src fd7a:115c:...`
-- **Partial matching**: `--src alex` matches any source containing "alex"
+- **Partial matching**: `--src laptop` matches any source containing "laptop"
 - **Node ID filtering**: Filter by Tailscale node IDs
 - **Combined filtering**: Use both `--src` and `--dst` together
 - **Flow-level precision**: Filtering works on individual flows, not entire log entries
@@ -218,11 +218,11 @@ Traffic types found: exitTraffic, physicalTraffic, virtualTraffic
 Machine Activity Summary:
 Machine Name                    | Entries |   TX Bytes |   RX Bytes | Virtual |  Subnet |    Exit | Physical
 ------------------------------- | ------- | ---------- | ---------- | ------- | ------- | ------- | --------
-dusans-macbook-pro              |      37 |   525.6 KB |     8.1 KB |    ✓    |         |         |    ✓   
-alex-mac1                       |      12 |    29.1 KB |    17.0 KB |    ✓    |         |    ✓    |    ✓   
-rgbeast                         |       8 |     1.0 KB |        0 B |         |         |    ✓    |         
-orin-dev                        |       6 |      600 B |        0 B |         |         |    ✓    |         
-100.103.69.121                  |       2 |      420 B |      156 B |         |         |    ✓    |    ✓   
+laptop-work                     |      37 |   525.6 KB |     8.1 KB |    ✓    |         |         |    ✓   
+desktop-home                    |      12 |    29.1 KB |    17.0 KB |    ✓    |         |    ✓    |    ✓   
+server-prod                     |       8 |     1.0 KB |        0 B |         |         |    ✓    |         
+dev-machine                     |       6 |      600 B |        0 B |         |         |    ✓    |         
+100.64.0.5                      |       2 |      420 B |      156 B |         |         |    ✓    |    ✓   
 
 Traffic Types:
   Virtual  - Direct Tailscale-to-Tailscale communication
@@ -238,10 +238,10 @@ Traffic Types:
 #
 Time     Src IP                                      SPort    Dst IP                                      DPort    Type     Proto TxBytes  RxBytes
 --------|-------------------------------------------|--------|-------------------------------------------|--------|--------|-----|--------|-------
-14:32:16 skep6                                       dhcpc    192.168.178.1                               dhcps    exit     UDP   328      
-14:32:20 rgbeast                                     35832    185.125.190.98                              http     exit     TCP   60       
-14:32:24 orin-dev                                    59738    91.189.91.96                                http     exit     TCP   180      
-14:32:28 laptop-work                                 49672    192.168.178.1                               dns      exit     TCP   120      
+14:32:16 laptop-work                                 dhcpc    192.168.1.1                                 dhcps    exit     UDP   328      
+14:32:20 server-prod                                 35832    203.0.113.10                                http     exit     TCP   60       
+14:32:24 dev-machine                                 59738    198.51.100.5                                http     exit     TCP   180      
+14:32:28 desktop-home                                49672    192.168.1.1                                 dns      exit     TCP   120      
 ```
 
 ### Compact Format - Subnet Traffic
@@ -251,21 +251,21 @@ Time     Src IP                                      SPort    Dst IP            
 #
 Time     Src IP                                      Dst IP                                      Type
 --------|-------------------------------------------|-------------------------------------------|--------
-14:31:36 172.17.0.1                                 10.123.123.13                               subnet
-14:31:43 172.17.0.1                                 10.123.123.13                               subnet
-14:31:46 172.17.0.1                                 10.123.123.29                               subnet
+14:31:36 172.17.0.1                                 10.0.1.10                                   subnet
+14:31:43 172.17.0.1                                 10.0.1.10                                   subnet
+14:31:46 172.17.0.1                                 10.0.1.20                                   subnet
 ```
 
 ### Source Filtering Example
 ```
 # Filtering criteria:
-# - Showing flows with source matching 'alex-mac1', '100.64.0.1', or partial matches
+# - Showing flows with source matching 'laptop-work', '100.64.0.1', or partial matches
 #
 Time     Src IP                                      SPort    Dst IP                                      DPort    Type     Proto TxBytes  RxBytes
 --------|-------------------------------------------|--------|-------------------------------------------|--------|--------|-----|--------|-------
-16:48:54 alex-mac1                                   52036    34.36.57.103                                https    exit     TCP   104      52
-16:49:02 alex-mac1                                   nbns     alex-mac1                                   nbns     virtual  UDP            1044
-16:49:10 alex-mac1                                   51229    173.194.65.188                              5228     exit     TCP   52      
+16:48:54 laptop-work                                 52036    203.0.113.50                                https    exit     TCP   104      52
+16:49:02 laptop-work                                 nbns     laptop-work                                 nbns     virtual  UDP            1044
+16:49:10 laptop-work                                 51229    198.51.100.88                               5228     exit     TCP   52      
 ```
 
 ### Service Name Examples
@@ -286,28 +286,28 @@ The utility has been verified to work correctly with actual Tailscale network da
 ./ts-logs -m 2 -t exit
 Time     Src IP                                      SPort    Dst IP                                      DPort    Type     Proto TxBytes  RxBytes
 --------|-------------------------------------------|--------|-------------------------------------------|--------|--------|-----|--------|-------
-09:51:31 skep6                                       dhcpc    192.168.178.1                               dhcps    exit     UDP   328      
-09:51:31 skep6                                       45320    192.168.178.1                               ntp      exit     UDP   76       
+09:51:31 laptop-work                                 dhcpc    192.168.1.1                                 dhcps    exit     UDP   328      
+09:51:31 laptop-work                                 45320    192.168.1.1                                 ntp      exit     UDP   76       
 
 # Physical traffic shows node-to-node communication  
 ./ts-logs -m 1 -t physical
 Time     Src IP                                      SPort    Dst IP                                      DPort    Type     Proto TxBytes  RxBytes
 --------|-------------------------------------------|--------|-------------------------------------------|--------|--------|-----|--------|-------
-09:52:26 queen2dev                                   0        34.77.239.134                               41641    physical       672      32
-09:52:25 skep6                                       0        109.202.219.171                             6949     physical       32       576
+09:52:26 dev-node1                                   0        203.0.113.134                               41641    physical       672      32
+09:52:25 prod-node2                                  0        198.51.100.171                              6949     physical       32       576
 
 # Source filtering with IPv6 support
-./ts-logs -m 5 -S fd7a:115c:a1e0:ab12:4843:cd96:6267:4579
+./ts-logs -m 5 -S fd7a:115c:a1e0::1234
 # Filtering criteria:
-# - Showing flows with source matching 'fd7a:115c:a1e0:ab12:4843:cd96:6267:4579', IP addresses, or partial matches
+# - Showing flows with source matching 'fd7a:115c:a1e0::1234', IP addresses, or partial matches
 #
 Time     Src IP                                      SPort    Dst IP                                      DPort    Type     Proto TxBytes  RxBytes
 --------|-------------------------------------------|--------|-------------------------------------------|--------|--------|-----|--------|-------
-13:41:43 [fd7a:115c:a1e0:ab12:4843:cd96:6267:4579]   52044    [2600:1f18:24e6:b902:a46c:a4a6:87fe:c14c]   https    exit     TCP   84      
+13:41:43 [fd7a:115c:a1e0::1234]                      52044    [2001:db8::5678]                            https    exit     TCP   84      
 ```
 
 All examples show:
-- ✅ Machine name resolution (skep6, queen2dev instead of 100.x.x.x IPs)  
+- ✅ Machine name resolution (laptop-work, dev-node1 instead of 100.x.x.x IPs)  
 - ✅ Service name resolution (dhcpc, dhcps, ntp, https instead of port numbers)
 - ✅ IPv6 address support with proper column alignment (43-character width)
 - ✅ Pipe-separated headers for clear column distinction
