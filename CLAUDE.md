@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 - **GitHub Username**: alexpach
 - **Repository**: tailscale-logging
-- **Last Major Update**: 2025-09-12 - Added numeric validation, CSV export format, and fixed unbound variable errors
+- **Last Major Update**: 2025-09-12 - Implemented 8 major enhancements: debug mode, stats, exclusion filters, IP masking, consolidated date handling, signal handling, test data generator, and comprehensive tests
 
 ## Repository Overview
 
@@ -26,7 +26,7 @@ The utility has been comprehensively tested with the following results:
 - **Time Range Options**: Minutes, hours, and other time range options working
 - **Error Handling**: Helpful error messages that guide users to solutions
 
-### ✅ Enhanced Features Working
+### ✅ Enhanced Features Working (Updated 2025-09-12)
 - **Table Format (Default)**: Detailed flows with separate port columns (src-ip, src-port, dst-ip, dst-port, type, proto, txBytes, rxBytes)
 - **Compact Format**: Simplified 4-column view (time, src-ip, dst-ip, type)
 - **Enhanced Summary Format**: Comprehensive machine activity overview with aggregated statistics
@@ -45,6 +45,13 @@ The utility has been comprehensively tested with the following results:
 - **Numeric Input Validation**: Time arguments (-m, -H, -d) validate for positive integers only (Added 2025-09-12)
 - **CSV Export Format**: Export traffic data in CSV format for spreadsheet analysis (Added 2025-09-12)
 - **Argument Validation**: All command-line options validate that required arguments are provided (Fixed 2025-09-12)
+- **Debug Mode**: Verbose logging with `--debug` flag for troubleshooting API calls and processing (Added 2025-09-12)
+- **Statistics Mode**: Processing statistics with `--stats` flag showing API times, record counts (Added 2025-09-12)
+- **Exclusion Filters**: `--exclude-src` and `--exclude-dst` to filter out unwanted traffic (Added 2025-09-12)
+- **IP Masking**: `--mask-ips` option for privacy, showing only first 2 octets of IPv4 addresses (Added 2025-09-12)
+- **Consolidated Date Handling**: Unified date functions supporting both GNU and BSD date commands (Added 2025-09-12)
+- **Signal Handling**: Proper cleanup on SIGINT/SIGTERM with statistics display (Added 2025-09-12)
+- **Test Data Generator**: Script to generate mock JSON data for testing without API access (Added 2025-09-12)
 
 ### 🎯 Original Issue Resolved
 The specific issue `./ts-logs -m 5 -t raw` now shows:

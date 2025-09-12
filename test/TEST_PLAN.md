@@ -64,11 +64,11 @@ This test plan covers verification of all features in the enhanced Tailscale net
 - [ ] **T024**: Compact headers align with data
 
 #### 3.3 CSV Format (Added 2025-09-12)
-- [x] **T024a**: `./ts-logs -f csv` outputs CSV format with headers
-- [x] **T024b**: CSV has 9 columns (Time, Source IP, Source Port, Destination IP, Destination Port, Type, Protocol, TX Bytes, RX Bytes)
-- [x] **T024c**: CSV data rows have consistent column count
-- [x] **T024d**: CSV format works with traffic type filters
-- [x] **T024e**: CSV output can be redirected to file
+- [x] **T024a**: `./ts-logs -f csv` outputs CSV format with headers ✅ TESTED
+- [x] **T024b**: CSV has 9 columns (Time, Source IP, Source Port, Destination IP, Destination Port, Type, Protocol, TX Bytes, RX Bytes) ✅ TESTED
+- [x] **T024c**: CSV data rows have consistent column count ✅ TESTED
+- [x] **T024d**: CSV format works with traffic type filters ✅ TESTED
+- [x] **T024e**: CSV output can be redirected to file ✅ TESTED
 
 #### 3.3 Enhanced Summary Format
 - [ ] **T025**: `./ts-logs -s` shows machine activity summary
@@ -157,6 +157,37 @@ This test plan covers verification of all features in the enhanced Tailscale net
 - [ ] **T088**: IPv6 addresses in summary format work
 
 ### 11. Error Handling Tests
+
+### 12. Debug Mode Tests (Added 2025-09-12)
+- [x] **T101**: `./ts-logs --debug -m 5` enables verbose logging ✅ TESTED
+- [x] **T102**: Debug output includes API URLs ✅ TESTED
+- [x] **T103**: Debug output includes fetch times ✅ TESTED
+- [x] **T104**: Debug mode works with all output formats ✅ TESTED
+
+### 13. Statistics Mode Tests (Added 2025-09-12)
+- [x] **T105**: `./ts-logs --stats -m 5` shows processing statistics ✅ TESTED
+- [x] **T106**: Stats include API fetch time ✅ TESTED
+- [x] **T107**: Stats include device fetch time ✅ TESTED
+- [x] **T108**: Stats include total and filtered record counts ✅ TESTED
+- [x] **T109**: Stats display on script exit ✅ TESTED
+
+### 14. Exclusion Filter Tests (Added 2025-09-12)
+- [x] **T110**: `./ts-logs --exclude-src machine -m 5` excludes source traffic ✅ TESTED
+- [x] **T111**: `./ts-logs --exclude-dst IP -m 5` excludes destination traffic ✅ TESTED
+- [x] **T112**: Exclusions work with regular filters ✅ TESTED
+- [x] **T113**: Multiple exclusions can be combined ✅ TESTED
+
+### 15. IP Masking Tests (Added 2025-09-12)
+- [x] **T114**: `./ts-logs --mask-ips -m 5` masks IP addresses ✅ TESTED
+- [x] **T115**: IPv4 shows only first 2 octets (e.g., 192.168.xxx.xxx) ✅ TESTED
+- [x] **T116**: IPv6 shows only first 4 segments ✅ TESTED
+- [x] **T117**: Masking works with all output formats ✅ TESTED
+
+### 16. Test Data Generator Tests (Added 2025-09-12)
+- [x] **T118**: `./test/generate_test_data.sh` generates valid JSON ✅ TESTED
+- [x] **T119**: Generator accepts -n parameter for entry count ✅ TESTED
+- [x] **T120**: Generator accepts -t parameter for traffic types ✅ TESTED
+- [x] **T121**: Generator can output to file with -o ✅ TESTED
 - [ ] **T089**: `./ts-logs -t raw` shows helpful error (format vs traffic type)
 - [ ] **T090**: `./ts-logs -f invalid` shows format error
 - [ ] **T091**: Network connectivity issues show clear errors
@@ -261,9 +292,9 @@ Tester: [Name]
 Environment: [OS/Shell]
 ts-logs Version: [Commit/Version]
 
-Passed: ___/100
-Failed: ___/100
-Skipped: ___/100
+Passed: ___/121
+Failed: ___/121
+Skipped: ___/121
 
 Critical Issues: [List]
 Minor Issues: [List]

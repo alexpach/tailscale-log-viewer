@@ -17,6 +17,10 @@ An enhanced command-line tool for fetching and analyzing Tailscale network logs 
 - **IPv6 support** - Full support for IPv6 addresses and proper parsing
 - **Traffic flow filtering** - Filter at the individual flow level, not just log entries
 - **Smart error handling** - Helpful error messages guide users to correct usage
+- **Exclusion filters** - Exclude specific sources or destinations from results
+- **IP masking** - Privacy mode to redact sensitive IP addresses
+- **Processing statistics** - Track API performance and record counts
+- **Debug mode** - Verbose logging for troubleshooting
 
 ### 📊 Output Formats
 - **Table format (default)** - Detailed view with separate columns for IPs, ports, services, and byte counts
@@ -98,6 +102,11 @@ TAILNET=your-company.com
 
 # Specific time range (RFC 3339 format)
 ./ts-logs --since 2025-08-28T00:00:00Z --until 2025-08-28T23:59:59Z
+
+# Advanced options
+./ts-logs -m 5 --debug  # Enable debug logging
+./ts-logs -m 5 --stats  # Show processing statistics
+./ts-logs -m 5 --mask-ips  # Mask IP addresses for privacy
 ```
 
 ### Output Formats
@@ -139,6 +148,25 @@ TAILNET=your-company.com
 ./ts-logs --dst fd7a:125c:a0e0::1 -m 15 # IPv6 destination filtering
 ```
 
+### Filtering and Exclusion
+
+```bash
+# Filter by source
+./ts-logs -S laptop-work -m 30  # Show only traffic from laptop-work
+./ts-logs -S 100.64.0.1 -H 2    # Filter by specific IP
+
+# Filter by destination
+./ts-logs -D server-prod -m 15  # Show only traffic to server-prod
+./ts-logs -D 192.168.1 -H 1     # Filter by subnet prefix
+
+# Exclude specific sources/destinations
+./ts-logs --exclude-src noisy-bot -m 30  # Hide traffic from noisy-bot
+./ts-logs --exclude-dst 8.8.8.8 -H 2     # Exclude DNS traffic to Google
+
+# Combine filters and exclusions
+./ts-logs -S laptop -D server --exclude-src bot -m 30
+```
+
 ### Advanced Examples
 
 ```bash
@@ -148,11 +176,14 @@ TAILNET=your-company.com
 # Monitor recent subnet activity
 ./ts-logs -t subnet -m 15 -f compact
 
-# Analyze traffic from specific machine
-./ts-logs --src laptop-work --today
+# Analyze traffic with privacy mode
+./ts-logs --mask-ips -m 30 -f csv > sanitized_logs.csv
 
-# Debug connectivity issues
-./ts-logs --dst problematic-server -H 2
+# Debug with verbose output and statistics
+./ts-logs --debug --stats -m 5
+
+# Export filtered data for analysis
+./ts-logs -t virtual --exclude-src bot -d 1 -f csv > virtual_traffic.csv
 
 # Monitor DHCP and DNS activity
 ./ts-logs -t exit -m 30 | grep -E 'dhcp|dns'

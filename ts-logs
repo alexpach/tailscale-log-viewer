@@ -2,6 +2,30 @@
 
 set -euo pipefail
 
+# Signal handling for clean shutdown
+cleanup() {
+    local exit_code=$?
+    if [[ "$DEBUG_MODE" == true ]]; then
+        debug_log "Script interrupted. Cleaning up..."
+    fi
+    
+    # Show statistics on exit if requested
+    if [[ "$SHOW_STATS" == true ]] && [[ -n "$PROCESSING_START_TIME" ]]; then
+        show_statistics
+    fi
+    
+    exit $exit_code
+}
+
+trap cleanup SIGINT SIGTERM EXIT
+
+# Debug logging function
+debug_log() {
+    if [[ "$DEBUG_MODE" == true ]]; then
+        echo "[DEBUG $(date '+%H:%M:%S')] $*" >&2
+    fi
+}
+
 # Load environment variables from .env file if it exists
 if [[ -f .env ]]; then
     # shellcheck disable=SC1091
@@ -14,6 +38,19 @@ OUTPUT_FORMAT="table"
 FILTER_TYPE=""
 FILTER_SRC=""
 FILTER_DST=""
+EXCLUDE_SRC=""
+EXCLUDE_DST=""
+DEBUG_MODE=false
+SHOW_STATS=false
+MASK_IPS=false
+START_TIME_EPOCH=""
+API_FETCH_TIME=0
+DEVICE_FETCH_TIME=0
+TOTAL_RECORDS=0
+FILTERED_RECORDS=0
+EXCLUDED_RECORDS=0
+PROCESSING_START_TIME=""
+PROCESSING_END_TIME=""
 
 show_help() {
     cat << EOF
@@ -39,6 +76,11 @@ Output Options:
 
 Other Options:
     -T, --tailnet NAME      Tailnet name (default: your-tailnet.com)
+        --exclude-src FILTER Exclude source traffic (machine name, IP, or node ID)
+        --exclude-dst FILTER Exclude destination traffic (machine name, IP, or node ID)
+        --mask-ips           Mask IP addresses for privacy (shows first 2 octets only)
+        --debug              Enable debug mode for verbose output
+        --stats              Show processing statistics
     -h, --help              Show this help
 
 Format Options:
@@ -125,14 +167,151 @@ validate_numeric() {
     fi
 }
 
+# Consolidated date handling functions
+get_date_command() {
+    if command -v gdate >/dev/null 2>&1; then
+        echo "gdate"
+    else
+        echo "date"
+    fi
+}
+
+format_date_relative() {
+    local amount="$1"
+    local unit="$2"  # minutes, hours, days
+    local date_cmd=$(get_date_command)
+    
+    if [[ "$date_cmd" == "gdate" ]]; then
+        $date_cmd -u -d "$amount $unit ago" --iso-8601=seconds | sed 's/+00:00/Z/'
+    else
+        case "$unit" in
+            minutes) date -u -d "$amount minutes ago" +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || date -u -v-${amount}M +"%Y-%m-%dT%H:%M:%SZ" ;;
+            hours) date -u -d "$amount hours ago" +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || date -u -v-${amount}H +"%Y-%m-%dT%H:%M:%SZ" ;;
+            days) date -u -d "$amount days ago" +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || date -u -v-${amount}d +"%Y-%m-%dT%H:%M:%SZ" ;;
+        esac
+    fi
+}
+
+format_date_current() {
+    local date_cmd=$(get_date_command)
+    if [[ "$date_cmd" == "gdate" ]]; then
+        $date_cmd -u --iso-8601=seconds | sed 's/+00:00/Z/'
+    else
+        date -u +"%Y-%m-%dT%H:%M:%SZ"
+    fi
+}
+
 format_date_rfc3339() {
     local date_input="$1"
-    if command -v gdate >/dev/null 2>&1; then
-        gdate -d "$date_input" --iso-8601=seconds | sed 's/+00:00/Z/'
+    local date_cmd=$(get_date_command)
+    if [[ "$date_cmd" == "gdate" ]]; then
+        $date_cmd -d "$date_input" --iso-8601=seconds | sed 's/+00:00/Z/'
     else
         date -d "$date_input" --iso-8601=seconds 2>/dev/null | sed 's/+00:00/Z/' || \
         date -u -j -f "%Y-%m-%d %H:%M:%S" "$date_input" "+%Y-%m-%dT%H:%M:%SZ" 2>/dev/null
     fi
+}
+
+# Function to mask IP addresses for privacy
+mask_ip() {
+    local ip="$1"
+    if [[ "$MASK_IPS" != true ]]; then
+        echo "$ip"
+        return
+    fi
+    
+    # Check if it's an IPv6 address
+    if [[ "$ip" =~ : ]]; then
+        # IPv6: Show first 4 segments
+        echo "${ip%%:*:*:*:*}:xxxx:xxxx:xxxx:xxxx"
+    elif [[ "$ip" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        # IPv4: Show first 2 octets
+        local octet1=$(echo "$ip" | cut -d. -f1)
+        local octet2=$(echo "$ip" | cut -d. -f2)
+        echo "${octet1}.${octet2}.xxx.xxx"
+    else
+        # Not an IP, return as-is (might be a hostname)
+        echo "$ip"
+    fi
+}
+
+# Function to check if traffic should be excluded
+should_exclude() {
+    local src="$1"
+    local dst="$2"
+    local ip_name_mapping="$3"
+    
+    # Check source exclusion
+    if [[ -n "$EXCLUDE_SRC" ]]; then
+        local resolved_src_ip=$(resolve_machine_name_to_ip "$EXCLUDE_SRC" "$ip_name_mapping")
+        
+        if [[ "$src" == *"$EXCLUDE_SRC"* ]]; then
+            ((EXCLUDED_RECORDS++))
+            return 0  # Should exclude
+        elif [[ -n "$resolved_src_ip" ]] && [[ "$src" == *"$resolved_src_ip"* ]]; then
+            ((EXCLUDED_RECORDS++))
+            return 0  # Should exclude
+        fi
+    fi
+    
+    # Check destination exclusion
+    if [[ -n "$EXCLUDE_DST" ]]; then
+        local resolved_dst_ip=$(resolve_machine_name_to_ip "$EXCLUDE_DST" "$ip_name_mapping")
+        
+        if [[ "$dst" == *"$EXCLUDE_DST"* ]]; then
+            ((EXCLUDED_RECORDS++))
+            return 0  # Should exclude
+        elif [[ -n "$resolved_dst_ip" ]] && [[ "$dst" == *"$resolved_dst_ip"* ]]; then
+            ((EXCLUDED_RECORDS++))
+            return 0  # Should exclude
+        fi
+    fi
+    
+    return 1  # Don't exclude
+}
+
+# Function to show processing statistics
+show_statistics() {
+    if [[ "$SHOW_STATS" != true ]]; then
+        return
+    fi
+    
+    echo "" >&2
+    echo "=== Processing Statistics ===" >&2
+    echo "API Fetch Time: ${API_FETCH_TIME}ms" >&2
+    echo "Device Fetch Time: ${DEVICE_FETCH_TIME}ms" >&2
+    echo "Total Records Fetched: $TOTAL_RECORDS" >&2
+    echo "Records After Filtering: $FILTERED_RECORDS" >&2
+    echo "Records Excluded: $EXCLUDED_RECORDS" >&2
+    
+    if [[ -n "$PROCESSING_START_TIME" ]] && [[ -n "$PROCESSING_END_TIME" ]]; then
+        local processing_time=$((PROCESSING_END_TIME - PROCESSING_START_TIME))
+        echo "Total Processing Time: ${processing_time}ms" >&2
+    fi
+    
+    echo "Time Range: $START_TIME to $END_TIME" >&2
+    
+    if [[ -n "$FILTER_TYPE" ]]; then
+        echo "Traffic Type Filter: $FILTER_TYPE" >&2
+    fi
+    
+    if [[ -n "$FILTER_SRC" ]]; then
+        echo "Source Filter: $FILTER_SRC" >&2
+    fi
+    
+    if [[ -n "$FILTER_DST" ]]; then
+        echo "Destination Filter: $FILTER_DST" >&2
+    fi
+    
+    if [[ -n "$EXCLUDE_SRC" ]]; then
+        echo "Source Exclusion: $EXCLUDE_SRC" >&2
+    fi
+    
+    if [[ -n "$EXCLUDE_DST" ]]; then
+        echo "Destination Exclusion: $EXCLUDE_DST" >&2
+    fi
+    
+    echo "===========================" >&2
 }
 
 
@@ -265,6 +444,11 @@ format_compact_output() {
                 dst_port=""
             fi
             
+            # Apply exclusion filters first
+            if should_exclude "$src" "$dst" "$ip_name_mapping"; then
+                continue
+            fi
+            
             # Apply source/destination filtering at flow level
             if [[ -n "$FILTER_SRC" ]]; then
                 # Check if source matches filter (IP, machine name, or partial match)
@@ -298,6 +482,8 @@ format_compact_output() {
                 fi
             fi
             
+            ((FILTERED_RECORDS++))
+            
             # Resolve Tailscale IPs (100.x.x.x) to machine names
             if [[ "$src_ip" =~ ^100\. ]]; then
                 resolved_name=$(lookup_machine_name "$src_ip" "$ip_name_mapping")
@@ -322,6 +508,10 @@ format_compact_output() {
                     fi
                 fi
             fi
+            
+            # Apply IP masking if requested
+            src_ip=$(mask_ip "$src_ip")
+            dst_ip=$(mask_ip "$dst_ip")
             
             # Format with proper column alignment and stream output immediately
             printf "%-8s %-43s %-43s %s\n" \
@@ -685,6 +875,11 @@ format_table_output() {
                 dst_port=""
             fi
             
+            # Apply exclusion filters first
+            if should_exclude "$src" "$dst" "$ip_name_mapping"; then
+                continue
+            fi
+            
             # Apply source/destination filtering at flow level
             if [[ -n "$FILTER_SRC" ]]; then
                 # Check if source matches filter (IP, machine name, or partial match)
@@ -718,6 +913,8 @@ format_table_output() {
                 fi
             fi
             
+            ((FILTERED_RECORDS++))
+            
             # Resolve Tailscale IPs (100.x.x.x) to machine names
             if [[ "$src_ip" =~ ^100\. ]]; then
                 resolved_name=$(lookup_machine_name "$src_ip" "$ip_name_mapping")
@@ -742,6 +939,10 @@ format_table_output() {
                     fi
                 fi
             fi
+            
+            # Apply IP masking if requested
+            src_ip=$(mask_ip "$src_ip")
+            dst_ip=$(mask_ip "$dst_ip")
             
             # Convert port numbers to service names
             src_service=$(get_service_name "$src_port")
@@ -994,11 +1195,19 @@ fetch_devices() {
     
     local url="https://api.tailscale.com/api/v2/tailnet/${TAILNET}/devices"
     
+    debug_log "Fetching device info from: $url"
     echo "Fetching device information..." >&2
+    
+    # Track device fetch time
+    local fetch_start=$(date +%s%3N 2>/dev/null || echo $(($(date +%s) * 1000)))
     
     local response
     response=$(curl -s -u "$api_token:" "$url")
     local curl_exit=$?
+    
+    local fetch_end=$(date +%s%3N 2>/dev/null || echo $(($(date +%s) * 1000)))
+    DEVICE_FETCH_TIME=$((fetch_end - fetch_start))
+    debug_log "Device fetch completed in ${DEVICE_FETCH_TIME}ms"
     
     if [[ $curl_exit -ne 0 ]]; then
         echo "Error: Failed to fetch devices from Tailscale API (curl exit code: $curl_exit)" >&2
@@ -1009,6 +1218,12 @@ fetch_devices() {
         echo "Error from Tailscale API:" >&2
         echo "$response" >&2
         exit 1
+    fi
+    
+    # Count devices if in debug mode
+    if [[ "$DEBUG_MODE" == true ]] && command -v jq >/dev/null 2>&1; then
+        local device_count=$(echo "$response" | jq '.devices | length // 0' 2>/dev/null || echo "0")
+        debug_log "Total devices fetched: $device_count"
     fi
     
     echo "$response"
@@ -1249,6 +1464,34 @@ main() {
                 yesterday=true
                 shift
                 ;;
+            --debug)
+                DEBUG_MODE=true
+                shift
+                ;;
+            --stats)
+                SHOW_STATS=true
+                shift
+                ;;
+            --mask-ips)
+                MASK_IPS=true
+                shift
+                ;;
+            --exclude-src)
+                if [[ -z "${2:-}" ]]; then
+                    echo "Error: --exclude-src requires a value (machine name, IP, or node ID)" >&2
+                    exit 1
+                fi
+                EXCLUDE_SRC="$2"
+                shift 2
+                ;;
+            --exclude-dst)
+                if [[ -z "${2:-}" ]]; then
+                    echo "Error: --exclude-dst requires a value (machine name, IP, or node ID)" >&2
+                    exit 1
+                fi
+                EXCLUDE_DST="$2"
+                shift 2
+                ;;
             *)
                 echo "Error: Unknown option $1" >&2
                 show_help >&2
@@ -1259,6 +1502,10 @@ main() {
     
     # Check configuration before proceeding
     check_configuration
+    
+    # Record processing start time
+    PROCESSING_START_TIME=$(date +%s%3N 2>/dev/null || echo $(($(date +%s) * 1000)))
+    debug_log "Processing started at $PROCESSING_START_TIME"
     
     # Set time range based on parsed arguments
     if [[ -n "$minutes" ]]; then
@@ -1346,6 +1593,10 @@ main() {
         filtered_response="$response"
     fi
     
+    # Record processing end time before output
+    PROCESSING_END_TIME=$(date +%s%3N 2>/dev/null || echo $(($(date +%s) * 1000)))
+    debug_log "Processing ended at $PROCESSING_END_TIME"
+    
     if [[ "$show_summary" == true ]]; then
         show_summary "$filtered_response" "$ip_name_mapping"
     elif [[ "$OUTPUT_FORMAT" == "table" ]]; then
@@ -1358,6 +1609,11 @@ main() {
         format_json_output "$filtered_response"
     else
         echo "$filtered_response"
+    fi
+    
+    # Show statistics if requested
+    if [[ "$SHOW_STATS" == true ]]; then
+        show_statistics
     fi
 }
 
