@@ -15,11 +15,10 @@
 - [ ] Create a configuration module for settings management
 
 ## Enhanced Features
-- [ ] Add CSV export format for spreadsheet analysis
+- [x] Add CSV export format for spreadsheet analysis ✅ COMPLETED
 - [ ] Implement filter presets (save/load common filter combinations)
 - [ ] Add real-time monitoring mode (`--follow` option)
 - [ ] Implement rate limiting awareness with backoff for API calls
-- [ ] Add `--output-file` option to save results directly to file
 - [ ] Support for multiple tailnets switching
 
 ## Testing
@@ -45,7 +44,7 @@
 - [x] Add validation for numeric arguments (prevent negative values) ✅ COMPLETED
 - [ ] Implement proper signal handling (SIGINT, SIGTERM)
 - [ ] Add `--debug` mode for troubleshooting
-- [ ] Improve error messages with error codes
+- [x] Improve error messages with error codes ✅ COMPLETED (added clear error messages for missing arguments)
 
 ## Documentation
 - [ ] Add man page for the tool

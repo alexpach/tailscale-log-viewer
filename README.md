@@ -21,6 +21,7 @@ An enhanced command-line tool for fetching and analyzing Tailscale network logs 
 ### 📊 Output Formats
 - **Table format (default)** - Detailed view with separate columns for IPs, ports, services, and byte counts
 - **Compact format** - Simplified 4-column view for quick analysis
+- **CSV format** - Comma-separated values for Excel/Google Sheets import
 - **Enhanced summary format** - Machine-centric activity overview with aggregated statistics
 - **JSON formats** - Raw and pretty-printed JSON output
 
@@ -107,6 +108,9 @@ TAILNET=your-company.com
 
 # Compact format - simplified 4-column view
 ./ts-logs -m 15 -f compact
+
+# CSV format - export to spreadsheet
+./ts-logs -m 15 -f csv > traffic.csv
 
 # JSON output (requires jq or python3)
 ./ts-logs -m 15 -f json

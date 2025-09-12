@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 - **GitHub Username**: alexpach
 - **Repository**: tailscale-logging
-- **Last Major Update**: 2025-09-12 - Added numeric validation for time arguments
+- **Last Major Update**: 2025-09-12 - Added numeric validation, CSV export format, and fixed unbound variable errors
 
 ## Repository Overview
 
@@ -21,7 +21,7 @@ The utility has been comprehensively tested with the following results:
 ### ✅ Core Features Verified
 - **Help System**: Comprehensive help with clear examples
 - **Configuration Management**: .env file support with helpful error messages
-- **Output Formats**: Table (detailed flows), compact (simplified), JSON, and raw formats all working
+- **Output Formats**: Table (detailed flows), compact (simplified), CSV (spreadsheet export), JSON, and raw formats all working
 - **Traffic Filtering**: Flow-level filtering for exit, subnet, physical, and virtual traffic
 - **Time Range Options**: Minutes, hours, and other time range options working
 - **Error Handling**: Helpful error messages that guide users to solutions
@@ -43,6 +43,8 @@ The utility has been comprehensively tested with the following results:
 - **Perfect Column Alignment**: All table formats have properly aligned headers and data
 - **Missing Byte Values**: Proper handling of missing TX/RX bytes (shows 0 instead of blank)
 - **Numeric Input Validation**: Time arguments (-m, -H, -d) validate for positive integers only (Added 2025-09-12)
+- **CSV Export Format**: Export traffic data in CSV format for spreadsheet analysis (Added 2025-09-12)
+- **Argument Validation**: All command-line options validate that required arguments are provided (Fixed 2025-09-12)
 
 ### 🎯 Original Issue Resolved
 The specific issue `./ts-logs -m 5 -t raw` now shows:

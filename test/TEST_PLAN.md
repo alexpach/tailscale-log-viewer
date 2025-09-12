@@ -37,6 +37,15 @@ This test plan covers verification of all features in the enhanced Tailscale net
 - [x] **T013g**: `./ts-logs -H 168` accepts large valid numbers
 - [x] **T013h**: Error messages clearly state "must be a positive integer (1 or greater)"
 
+#### 2.2 Missing Argument Validation Tests (Added 2025-09-12)
+- [x] **T013i**: `./ts-logs -f` shows error "requires a value"
+- [x] **T013j**: `./ts-logs -m` shows error "requires a numeric value"
+- [x] **T013k**: `./ts-logs -H` shows error "requires a numeric value"
+- [x] **T013l**: `./ts-logs -d` shows error "requires a numeric value"
+- [x] **T013m**: `./ts-logs -S` shows error "requires a value"
+- [x] **T013n**: `./ts-logs -D` shows error "requires a value"
+- [x] **T013o**: `./ts-logs -t` shows error "requires a value"
+
 ### 3. Output Format Tests
 
 #### 3.1 Table Format (Default)
@@ -53,6 +62,13 @@ This test plan covers verification of all features in the enhanced Tailscale net
 - [ ] **T022**: `./ts-logs -f compact` shows 4-column format
 - [ ] **T023**: Compact format has proper column alignment
 - [ ] **T024**: Compact headers align with data
+
+#### 3.3 CSV Format (Added 2025-09-12)
+- [x] **T024a**: `./ts-logs -f csv` outputs CSV format with headers
+- [x] **T024b**: CSV has 9 columns (Time, Source IP, Source Port, Destination IP, Destination Port, Type, Protocol, TX Bytes, RX Bytes)
+- [x] **T024c**: CSV data rows have consistent column count
+- [x] **T024d**: CSV format works with traffic type filters
+- [x] **T024e**: CSV output can be redirected to file
 
 #### 3.3 Enhanced Summary Format
 - [ ] **T025**: `./ts-logs -s` shows machine activity summary

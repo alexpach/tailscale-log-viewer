@@ -31,7 +31,7 @@ Time Options (pick one):
         --yesterday         Yesterday's logs
 
 Output Options:
-    -f, --format FORMAT     Output format: table, json, raw, compact (default: table)
+    -f, --format FORMAT     Output format: table, json, raw, compact, csv (default: table)
     -t, --filter-type TYPE  Filter by traffic type: virtual, subnet, exit, physical
     -S, --src FILTER        Filter by source (machine name, IP, or node ID)
     -D, --dst FILTER        Filter by destination (machine name, IP, or node ID)
@@ -44,6 +44,7 @@ Other Options:
 Format Options:
     table    - All traffic flows with: time, src-ip, src-port, dst-ip, dst-port, type, proto, txBytes, rxBytes (default)
     compact  - Simplified view: time, src-ip, dst-ip, type
+    csv      - Comma-separated values for spreadsheet import
     json     - Pretty formatted JSON
     raw      - Raw JSON output
 
@@ -57,6 +58,7 @@ Examples:
     $0 -H 2 -S laptop-work              # Last 2 hours from source 'laptop-work'
     $0 -m 10 -D 100.64.0.1              # Last 10 minutes to destination IP
     $0 -H 1 -S server -D 192.168.1      # Last hour from 'server' to '192.168.1' subnet
+    $0 -d 1 -f csv > traffic.csv        # Export last day's traffic to CSV file
 
 EOF
 }
@@ -334,6 +336,153 @@ format_compact_output() {
         fi
     else
         echo "jq is required for compact formatting. Install jq or use --format json"
+        exit 1
+    fi
+}
+
+format_csv_output() {
+    local response="$1"
+    local ip_name_mapping="$2"
+    if command -v jq >/dev/null 2>&1; then
+        # CSV header
+        echo "Time,Source IP,Source Port,Destination IP,Destination Port,Type,Protocol,TX Bytes,RX Bytes"
+        
+        # Check if there are any logs at all
+        local log_count=$(echo "$response" | jq -r '.logs | length // 0' 2>/dev/null || echo "0")
+        if [[ "$log_count" -eq 0 ]]; then
+            return
+        fi
+        
+        # Build the jq filter based on FILTER_TYPE
+        local jq_filter='
+        .logs[]? // [] | select(.) | 
+        . as $log |
+        ('
+        
+        if [[ -n "$FILTER_TYPE" ]]; then
+            case "$FILTER_TYPE" in
+                "virtual")
+                    jq_filter+='
+                    if .virtualTraffic then 
+                        .virtualTraffic[] | [$log.start, (.src // ""), (.dst // ""), (.proto // ""), (.txBytes // 0), (.rxBytes // 0), "virtual"]
+                    else [] end'
+                    ;;
+                "subnet")
+                    jq_filter+='
+                    if .subnetTraffic then 
+                        .subnetTraffic[] | [$log.start, (.src // ""), (.dst // ""), (.proto // ""), (.txBytes // 0), (.rxBytes // 0), "subnet"]
+                    else [] end'
+                    ;;
+                "exit")
+                    jq_filter+='
+                    if .exitTraffic then 
+                        .exitTraffic[] | [$log.start, (.src // ""), (.dst // ""), (.proto // ""), (.txBytes // 0), (.rxBytes // 0), "exit"]
+                    else [] end'
+                    ;;
+                "physical")
+                    jq_filter+='
+                    if .physicalTraffic then 
+                        .physicalTraffic[] | [$log.start, (.src // ""), (.dst // ""), (.proto // ""), (.txBytes // 0), (.rxBytes // 0), "physical"]
+                    else [] end'
+                    ;;
+            esac
+        else
+            # No filter - show all traffic types
+            jq_filter+='
+            if .virtualTraffic then 
+                .virtualTraffic[] | [$log.start, (.src // ""), (.dst // ""), (.proto // ""), (.txBytes // 0), (.rxBytes // 0), "virtual"]
+            else [] end,
+            if .subnetTraffic then 
+                .subnetTraffic[] | [$log.start, (.src // ""), (.dst // ""), (.proto // ""), (.txBytes // 0), (.rxBytes // 0), "subnet"]
+            else [] end,
+            if .exitTraffic then 
+                .exitTraffic[] | [$log.start, (.src // ""), (.dst // ""), (.proto // ""), (.txBytes // 0), (.rxBytes // 0), "exit"]
+            else [] end,
+            if .physicalTraffic then 
+                .physicalTraffic[] | [$log.start, (.src // ""), (.dst // ""), (.proto // ""), (.txBytes // 0), (.rxBytes // 0), "physical"]
+            else [] end'
+        fi
+        
+        jq_filter+='
+        ) | select(length > 0) | @tsv'
+        
+        # Process all flows and output as CSV
+        echo "$response" | jq -r "$jq_filter" | while IFS=$'\t' read -r start src dst proto txBytes rxBytes type; do
+            # Format timestamp to local time
+            formatted_time=$(format_timestamp "$start")
+            
+            # Handle empty fields
+            [[ "$src" == "null" || -z "$src" ]] && src=""
+            [[ "$dst" == "null" || -z "$dst" ]] && dst=""
+            [[ "$proto" == "null" || -z "$proto" ]] && proto=""
+            [[ "$txBytes" == "null" || -z "$txBytes" ]] && txBytes="0"
+            [[ "$rxBytes" == "null" || -z "$rxBytes" ]] && rxBytes="0"
+            
+            # Split src and dst into IP and port (handle IPv6 [ip]:port format)
+            src_ip=""
+            src_port=""
+            dst_ip=""
+            dst_port=""
+            
+            if [[ -n "$src" ]]; then
+                if [[ "$src" =~ ^\[.*\]:[0-9]+$ ]]; then
+                    # IPv6 format: [ipv6]:port
+                    src_ip="${src%:*}"
+                    src_port="${src##*:}"
+                elif [[ "$src" =~ ^[^:]*:[0-9]+$ ]]; then
+                    # IPv4 format: ipv4:port
+                    src_ip="${src%:*}"
+                    src_port="${src##*:}"
+                else
+                    # No port or IPv6 without port
+                    src_ip="$src"
+                fi
+            fi
+            
+            if [[ -n "$dst" ]]; then
+                if [[ "$dst" =~ ^\[.*\]:[0-9]+$ ]]; then
+                    # IPv6 format: [ipv6]:port
+                    dst_ip="${dst%:*}"
+                    dst_port="${dst##*:}"
+                elif [[ "$dst" =~ ^[^:]*:[0-9]+$ ]]; then
+                    # IPv4 format: ipv4:port
+                    dst_ip="${dst%:*}"
+                    dst_port="${dst##*:}"
+                else
+                    # No port or IPv6 without port
+                    dst_ip="$dst"
+                fi
+            fi
+            
+            # Apply source/destination filtering at flow level
+            if [[ -n "$FILTER_SRC" ]]; then
+                # Check if source matches filter (IP, machine name, or partial match)
+                local src_machine_name=$(lookup_machine_name "$src_ip" "$ip_name_mapping")
+                if ! [[ "$src_ip" == *"$FILTER_SRC"* || "$src_machine_name" == *"$FILTER_SRC"* || "$src" == *"$FILTER_SRC"* ]]; then
+                    continue
+                fi
+            fi
+            
+            if [[ -n "$FILTER_DST" ]]; then
+                # Check if destination matches filter (IP, machine name, or partial match)
+                local dst_machine_name=$(lookup_machine_name "$dst_ip" "$ip_name_mapping")
+                if ! [[ "$dst_ip" == *"$FILTER_DST"* || "$dst_machine_name" == *"$FILTER_DST"* || "$dst" == *"$FILTER_DST"* ]]; then
+                    continue
+                fi
+            fi
+            
+            # Resolve machine names for Tailscale IPs
+            src_display=$(lookup_machine_name "$src_ip" "$ip_name_mapping")
+            dst_display=$(lookup_machine_name "$dst_ip" "$ip_name_mapping")
+            
+            # Get protocol name
+            proto_display=$(get_protocol_name "$proto")
+            
+            # Output CSV row (properly escape fields with commas)
+            echo "${formatted_time},${src_display},${src_port},${dst_display},${dst_port},${type},${proto_display},${txBytes},${rxBytes}"
+        done
+    else
+        echo "jq is required for CSV formatting. Install jq or use --format raw"
         exit 1
     fi
 }
@@ -991,10 +1140,18 @@ main() {
                 exit 0
                 ;;
             --format|-f)
+                if [[ -z "${2:-}" ]]; then
+                    echo "Error: --format requires a value (table, compact, csv, json, or raw)" >&2
+                    exit 1
+                fi
                 OUTPUT_FORMAT="$2"
                 shift 2
                 ;;
             --filter-type|-t)
+                if [[ -z "${2:-}" ]]; then
+                    echo "Error: --filter-type requires a value (virtual, subnet, exit, or physical)" >&2
+                    exit 1
+                fi
                 case "$2" in
                     virtual|subnet|exit|physical)
                         FILTER_TYPE="$2"
@@ -1014,14 +1171,26 @@ main() {
                 shift 2
                 ;;
             --src|-S)
+                if [[ -z "${2:-}" ]]; then
+                    echo "Error: --src requires a value (machine name, IP, or node ID)" >&2
+                    exit 1
+                fi
                 FILTER_SRC="$2"
                 shift 2
                 ;;
             --dst|-D)
+                if [[ -z "${2:-}" ]]; then
+                    echo "Error: --dst requires a value (machine name, IP, or node ID)" >&2
+                    exit 1
+                fi
                 FILTER_DST="$2"
                 shift 2
                 ;;
             --tailnet|-T)
+                if [[ -z "${2:-}" ]]; then
+                    echo "Error: --tailnet requires a value" >&2
+                    exit 1
+                fi
                 TAILNET="$2"
                 shift 2
                 ;;
@@ -1030,25 +1199,45 @@ main() {
                 shift
                 ;;
             --hours|-H)
+                if [[ -z "${2:-}" ]]; then
+                    echo "Error: --hours requires a numeric value" >&2
+                    exit 1
+                fi
                 hours="$2"
                 validate_numeric "$hours" "--hours"
                 shift 2
                 ;;
             --days|-d)
+                if [[ -z "${2:-}" ]]; then
+                    echo "Error: --days requires a numeric value" >&2
+                    exit 1
+                fi
                 days="$2"
                 validate_numeric "$days" "--days"
                 shift 2
                 ;;
             --minutes|-m)
+                if [[ -z "${2:-}" ]]; then
+                    echo "Error: --minutes requires a numeric value" >&2
+                    exit 1
+                fi
                 minutes="$2"
                 validate_numeric "$minutes" "--minutes"
                 shift 2
                 ;;
             --since)
+                if [[ -z "${2:-}" ]]; then
+                    echo "Error: --since requires a timestamp value" >&2
+                    exit 1
+                fi
                 since="$2"
                 shift 2
                 ;;
             --until)
+                if [[ -z "${2:-}" ]]; then
+                    echo "Error: --until requires a timestamp value" >&2
+                    exit 1
+                fi
                 until="$2"
                 shift 2
                 ;;
@@ -1131,14 +1320,14 @@ main() {
         exit 1
     fi
     
-    if [[ "$OUTPUT_FORMAT" != "json" && "$OUTPUT_FORMAT" != "table" && "$OUTPUT_FORMAT" != "raw" && "$OUTPUT_FORMAT" != "compact" ]]; then
-        echo "Error: Invalid output format. Use: json, table, raw, or compact" >&2
+    if [[ "$OUTPUT_FORMAT" != "json" && "$OUTPUT_FORMAT" != "table" && "$OUTPUT_FORMAT" != "raw" && "$OUTPUT_FORMAT" != "compact" && "$OUTPUT_FORMAT" != "csv" ]]; then
+        echo "Error: Invalid output format. Use: json, table, raw, compact, or csv" >&2
         exit 1
     fi
     
-    # Fetch device information for machine name mapping (needed for table/compact formats, summary, and src/dst filtering)
+    # Fetch device information for machine name mapping (needed for table/compact/csv formats, summary, and src/dst filtering)
     local ip_name_mapping=""
-    if [[ "$OUTPUT_FORMAT" == "table" || "$OUTPUT_FORMAT" == "compact" || "$show_summary" == true || -n "$FILTER_SRC" || -n "$FILTER_DST" ]]; then
+    if [[ "$OUTPUT_FORMAT" == "table" || "$OUTPUT_FORMAT" == "compact" || "$OUTPUT_FORMAT" == "csv" || "$show_summary" == true || -n "$FILTER_SRC" || -n "$FILTER_DST" ]]; then
         local devices_response
         devices_response=$(fetch_devices)
         ip_name_mapping=$(create_ip_name_mapping "$devices_response")
@@ -1163,6 +1352,8 @@ main() {
         format_table_output "$filtered_response" "$ip_name_mapping"
     elif [[ "$OUTPUT_FORMAT" == "compact" ]]; then
         format_compact_output "$filtered_response" "$ip_name_mapping"
+    elif [[ "$OUTPUT_FORMAT" == "csv" ]]; then
+        format_csv_output "$filtered_response" "$ip_name_mapping"
     elif [[ "$OUTPUT_FORMAT" == "json" ]]; then
         format_json_output "$filtered_response"
     else
