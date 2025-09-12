@@ -5,7 +5,7 @@
 
 set -euo pipefail
 
-SCRIPT="./ts-logs"
+SCRIPT="../ts-logs"
 export TAILNET="test.com"  # Set a test tailnet to avoid config error
 
 # Colors for output
