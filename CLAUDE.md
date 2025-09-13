@@ -276,6 +276,32 @@ Common ports are automatically resolved to short, recognizable service names:
 - Port `9100` → `prom` (Prometheus metrics)
 - Port `3306` → `mysql`, `5432` → `pgsql`
 
+## Test Data Support
+
+The utility includes comprehensive test data support for offline testing and development:
+
+### Test Data Generation
+- **Command**: `./ts-logs --generate-test-data`
+- **Purpose**: Creates realistic test data without requiring API access
+- **Output**: Saves to `examples/test-data-YYYYMMDD.json`
+- **Contents**: 50 log entries with various traffic types and device information
+
+### Using Test Data
+- **Command**: `./ts-logs --use-test-data [options]`
+- **Purpose**: Uses cached test data instead of making API calls
+- **Benefits**:
+  - Enables offline testing and development
+  - Avoids API rate limits during testing
+  - Provides consistent test results
+  - Prevents timeouts with large data requests
+  - All formatting and filtering features work with test data
+
+### Test Scripts
+All test scripts automatically generate test data if not present and use it to avoid API dependencies:
+- `test/test_numeric_validation.sh` - Validates time range parameters
+- `test/test_csv_output.sh` - Tests CSV export functionality
+- `test/test_new_features.sh` - Tests debug mode, stats, filters, etc.
+
 ## Testing Verification
 
 The utility has been verified to work correctly with actual Tailscale network data:

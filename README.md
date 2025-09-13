@@ -318,6 +318,33 @@ Underlying physical network communication between nodes:
 | | `--mask-ips` | Mask IP addresses for privacy |
 | | `--exclude-src VALUE` | Exclude source traffic |
 | | `--exclude-dst VALUE` | Exclude destination traffic |
+| | `--generate-test-data` | Generate test data for offline testing |
+| | `--use-test-data` | Use cached test data instead of API |
+
+## Test Data Support
+
+The utility includes support for offline testing and development using test data:
+
+### Generating Test Data
+```bash
+# Generate realistic test data
+./ts-logs --generate-test-data
+# Creates: examples/test-data-YYYYMMDD.json
+```
+
+### Using Test Data
+```bash
+# Use test data instead of API calls
+./ts-logs --use-test-data -m 5
+./ts-logs --use-test-data -H 2 -f compact
+./ts-logs --use-test-data -s
+```
+
+### Benefits
+- **Offline Development**: Work without network connection or API access
+- **Consistent Testing**: Reproducible results for testing and debugging
+- **No Rate Limits**: Avoid API rate limits during development
+- **Fast Execution**: No network latency for quick iterations
 
 ## Dependencies
 

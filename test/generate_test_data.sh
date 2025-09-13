@@ -5,13 +5,20 @@
 
 set -euo pipefail
 
+# Ensure we're running from the project root
+if [[ ! -f "ts-logs" ]]; then
+    echo "Error: This test must be run from the project root directory" >&2
+    echo "Usage: ./test/generate_test_data.sh" >&2
+    exit 1
+fi
+
 # Default values
 NUM_LOGS=10
 TRAFFIC_TYPES="virtual,subnet,exit,physical"
 OUTPUT_FILE=""
 
 show_help() {
-    cat << EOF
+    cat <<EOF
 Usage: $0 [OPTIONS]
 
 Generate test data for ts-logs utility testing.
@@ -44,7 +51,7 @@ while [[ $# -gt 0 ]]; do
             OUTPUT_FILE="$2"
             shift 2
             ;;
-        -h|--help)
+        -h | --help)
             show_help
             exit 0
             ;;
@@ -68,7 +75,7 @@ PORTS=(22 80 443 3389 5432 8080 9100 53 67 68 123)
 
 # Generate random timestamp
 generate_timestamp() {
-    local offset=$((RANDOM % 3600))  # Random offset within last hour
+    local offset=$((RANDOM % 3600)) # Random offset within last hour
     if [[ "$(uname)" == "Darwin" ]]; then
         date -u -v-${offset}S "+%Y-%m-%dT%H:%M:%SZ"
     else
@@ -80,7 +87,7 @@ generate_timestamp() {
 generate_ip_port() {
     local ip_type=$1
     local ip port
-    
+
     case $ip_type in
         tailscale)
             ip="${TAILSCALE_IPS[$((RANDOM % ${#TAILSCALE_IPS[@]}))]}"
@@ -98,10 +105,10 @@ generate_ip_port() {
             ip="127.0.0.1"
             ;;
     esac
-    
+
     port="${PORTS[$((RANDOM % ${#PORTS[@]}))]}"
-    
-    if [[ "$ip" =~ : ]]; then
+
+    if [[ $ip =~ : ]]; then
         echo "[${ip}]:${port}"
     else
         echo "${ip}:${port}"
@@ -112,7 +119,7 @@ generate_ip_port() {
 generate_traffic_entry() {
     local traffic_type=$1
     local src dst proto txBytes rxBytes
-    
+
     case $traffic_type in
         virtual)
             src=$(generate_ip_port tailscale)
@@ -136,12 +143,12 @@ generate_traffic_entry() {
             dst=$(generate_ip_port external)
             ;;
     esac
-    
+
     proto="${PROTOCOLS[$((RANDOM % ${#PROTOCOLS[@]}))]}"
     txBytes=$((RANDOM % 100000))
     rxBytes=$((RANDOM % 100000))
-    
-    cat << EOF
+
+    cat <<EOF
             {
                 "src": "$src",
                 "dst": "$dst",
@@ -157,52 +164,52 @@ generate_log_entry() {
     local timestamp=$(generate_timestamp)
     local traffic_array=(${TRAFFIC_TYPES//,/ })
     local entries=""
-    
+
     echo "    {"
     echo "        \"start\": \"$timestamp\","
     echo "        \"end\": \"$timestamp\","
-    echo "        \"nodeId\": \"${NODE_IDS[$((RANDOM % ${#NODE_IDS[@]}))]}}\","
-    
+    echo "        \"nodeId\": \"${NODE_IDS[$((RANDOM % ${#NODE_IDS[@]}))]}\","
+
     # Generate traffic for each type if randomly selected
     for traffic_type in "${traffic_array[@]}"; do
-        if [[ $((RANDOM % 3)) -gt 0 ]]; then  # 66% chance to include each type
+        if [[ $((RANDOM % 3)) -gt 0 ]]; then # 66% chance to include each type
             case $traffic_type in
                 virtual)
-                    echo "        \"virtualTraffic\": ["
+                    echo '        "virtualTraffic": ['
                     generate_traffic_entry virtual
                     echo "        ],"
                     ;;
                 subnet)
-                    echo "        \"subnetTraffic\": ["
+                    echo '        "subnetTraffic": ['
                     generate_traffic_entry subnet
                     echo "        ],"
                     ;;
                 exit)
-                    echo "        \"exitTraffic\": ["
+                    echo '        "exitTraffic": ['
                     generate_traffic_entry exit
                     echo "        ],"
                     ;;
                 physical)
-                    echo "        \"physicalTraffic\": ["
+                    echo '        "physicalTraffic": ['
                     generate_traffic_entry physical
                     echo "        ],"
                     ;;
             esac
         fi
-    done | sed '$ s/,$//'  # Remove trailing comma from last item
-    
+    done | sed '$ s/,$//' # Remove trailing comma from last item
+
     echo "    }"
 }
 
 # Generate devices data
 generate_devices() {
-    cat << EOF
+    cat <<EOF
 {
     "devices": [
 EOF
-    
+
     for i in "${!TAILSCALE_IPS[@]}"; do
-        cat << EOF
+        cat <<EOF
         {
             "id": "${NODE_IDS[$i]}",
             "name": "${MACHINE_NAMES[$i]}.tail43508.ts.net",
@@ -215,8 +222,8 @@ EOF
             echo "        ,"
         fi
     done
-    
-    cat << EOF
+
+    cat <<EOF
     ]
 }
 EOF
@@ -224,33 +231,33 @@ EOF
 
 # Main output generation
 generate_output() {
-    cat << EOF
+    cat <<EOF
 {
     "logs": [
 EOF
-    
-    for ((i=1; i<=NUM_LOGS; i++)); do
+
+    for ((i = 1; i <= NUM_LOGS; i++)); do
         generate_log_entry
         if [[ $i -lt $NUM_LOGS ]]; then
             echo "    ,"
         fi
     done
-    
-    cat << EOF
+
+    cat <<EOF
     ]
 }
 EOF
 }
 
 # Generate and output data
-if [[ -n "$OUTPUT_FILE" ]]; then
+if [[ -n $OUTPUT_FILE ]]; then
     {
         echo "=== LOGS DATA ==="
         generate_output
         echo ""
         echo "=== DEVICES DATA ==="
         generate_devices
-    } > "$OUTPUT_FILE"
+    } >"$OUTPUT_FILE"
     echo "Generated test data saved to: $OUTPUT_FILE" >&2
 else
     generate_output
