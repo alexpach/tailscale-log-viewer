@@ -313,7 +313,11 @@ Underlying physical network communication between nodes:
 | Short | Long | Description |
 |-------|------|-------------|
 | `-h` | `--help` | Show help message |
-| `-v` | `--verbose` | Enable verbose output |
+| | `--debug` | Enable debug mode for verbose output |
+| | `--stats` | Show processing statistics |
+| | `--mask-ips` | Mask IP addresses for privacy |
+| | `--exclude-src VALUE` | Exclude source traffic |
+| | `--exclude-dst VALUE` | Exclude destination traffic |
 
 ## Dependencies
 
@@ -371,7 +375,7 @@ sudo apt-get install jq
 ### Debug Mode
 Enable verbose output to see API requests and responses:
 ```bash
-./ts-logs -v -m 5
+./ts-logs --debug -m 5
 ```
 
 ## Security Considerations
