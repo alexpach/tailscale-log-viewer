@@ -4,7 +4,7 @@
 echo "Testing CSV output format (simple test)..."
 
 # Run from parent directory to ensure .env is found
-cd "$(dirname "$0")/.."
+cd "$(dirname "$0")/.." || exit 1
 
 # Test CSV output
 if ./ts-logs -m 5 -f csv 2>/dev/null | head -1 | grep -q "Time,Source IP"; then

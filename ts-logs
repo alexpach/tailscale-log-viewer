@@ -44,7 +44,6 @@ EXCLUDE_DST=""
 DEBUG_MODE=false
 SHOW_STATS=false
 MASK_IPS=false
-START_TIME_EPOCH=""
 API_FETCH_TIME=0
 DEVICE_FETCH_TIME=0
 TOTAL_RECORDS=0
@@ -186,9 +185,9 @@ format_date_relative() {
         $date_cmd -u -d "$amount $unit ago" --iso-8601=seconds | sed 's/+00:00/Z/'
     else
         case "$unit" in
-            minutes) date -u -d "$amount minutes ago" +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || date -u -v-${amount}M +"%Y-%m-%dT%H:%M:%SZ" ;;
-            hours) date -u -d "$amount hours ago" +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || date -u -v-${amount}H +"%Y-%m-%dT%H:%M:%SZ" ;;
-            days) date -u -d "$amount days ago" +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || date -u -v-${amount}d +"%Y-%m-%dT%H:%M:%SZ" ;;
+            minutes) date -u -d "$amount minutes ago" +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || date -u -v-"${amount}"M +"%Y-%m-%dT%H:%M:%SZ" ;;
+            hours) date -u -d "$amount hours ago" +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || date -u -v-"${amount}"H +"%Y-%m-%dT%H:%M:%SZ" ;;
+            days) date -u -d "$amount days ago" +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || date -u -v-"${amount}"d +"%Y-%m-%dT%H:%M:%SZ" ;;
         esac
     fi
 }
@@ -458,7 +457,7 @@ format_compact_output() {
                 
                 if [[ "$src" == *"$FILTER_SRC"* ]] || [[ "$src_ip" == *"$FILTER_SRC"* ]]; then
                     src_matches=true
-                elif [[ -n "$resolved_src_ip" ]] && ([[ "$src" == *"$resolved_src_ip"* ]] || [[ "$src_ip" == *"$resolved_src_ip"* ]]); then
+                elif [[ -n "$resolved_src_ip" ]] && { [[ "$src" == *"$resolved_src_ip"* ]] || [[ "$src_ip" == *"$resolved_src_ip"* ]]; }; then
                     src_matches=true
                 fi
                 
@@ -474,7 +473,7 @@ format_compact_output() {
                 
                 if [[ "$dst" == *"$FILTER_DST"* ]] || [[ "$dst_ip" == *"$FILTER_DST"* ]]; then
                     dst_matches=true
-                elif [[ -n "$resolved_dst_ip" ]] && ([[ "$dst" == *"$resolved_dst_ip"* ]] || [[ "$dst_ip" == *"$resolved_dst_ip"* ]]); then
+                elif [[ -n "$resolved_dst_ip" ]] && { [[ "$dst" == *"$resolved_dst_ip"* ]] || [[ "$dst_ip" == *"$resolved_dst_ip"* ]]; }; then
                     dst_matches=true
                 fi
                 
@@ -889,7 +888,7 @@ format_table_output() {
                 
                 if [[ "$src" == *"$FILTER_SRC"* ]] || [[ "$src_ip" == *"$FILTER_SRC"* ]]; then
                     src_matches=true
-                elif [[ -n "$resolved_src_ip" ]] && ([[ "$src" == *"$resolved_src_ip"* ]] || [[ "$src_ip" == *"$resolved_src_ip"* ]]); then
+                elif [[ -n "$resolved_src_ip" ]] && { [[ "$src" == *"$resolved_src_ip"* ]] || [[ "$src_ip" == *"$resolved_src_ip"* ]]; }; then
                     src_matches=true
                 fi
                 
@@ -905,7 +904,7 @@ format_table_output() {
                 
                 if [[ "$dst" == *"$FILTER_DST"* ]] || [[ "$dst_ip" == *"$FILTER_DST"* ]]; then
                     dst_matches=true
-                elif [[ -n "$resolved_dst_ip" ]] && ([[ "$dst" == *"$resolved_dst_ip"* ]] || [[ "$dst_ip" == *"$resolved_dst_ip"* ]]); then
+                elif [[ -n "$resolved_dst_ip" ]] && { [[ "$dst" == *"$resolved_dst_ip"* ]] || [[ "$dst_ip" == *"$resolved_dst_ip"* ]]; }; then
                     dst_matches=true
                 fi
                 
@@ -1552,7 +1551,7 @@ main() {
             START_TIME=$(gdate -u -d "$minutes minutes ago" --iso-8601=seconds | sed 's/+00:00/Z/')
             END_TIME=$(gdate -u --iso-8601=seconds | sed 's/+00:00/Z/')
         else
-            START_TIME=$(date -u -d "$minutes minutes ago" +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || date -u -v-${minutes}M +"%Y-%m-%dT%H:%M:%SZ")
+            START_TIME=$(date -u -d "$minutes minutes ago" +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || date -u -v-"${minutes}"M +"%Y-%m-%dT%H:%M:%SZ")
             END_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
         fi
     elif [[ -n "$hours" ]]; then
@@ -1560,7 +1559,7 @@ main() {
             START_TIME=$(gdate -u -d "$hours hours ago" --iso-8601=seconds | sed 's/+00:00/Z/')
             END_TIME=$(gdate -u --iso-8601=seconds | sed 's/+00:00/Z/')
         else
-            START_TIME=$(date -u -d "$hours hours ago" +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || date -u -v-${hours}H +"%Y-%m-%dT%H:%M:%SZ")
+            START_TIME=$(date -u -d "$hours hours ago" +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || date -u -v-"${hours}"H +"%Y-%m-%dT%H:%M:%SZ")
             END_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
         fi
     elif [[ -n "$days" ]]; then
@@ -1568,7 +1567,7 @@ main() {
             START_TIME=$(gdate -u -d "$days days ago" --iso-8601=seconds | sed 's/+00:00/Z/')
             END_TIME=$(gdate -u --iso-8601=seconds | sed 's/+00:00/Z/')
         else
-            START_TIME=$(date -u -d "$days days ago" +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || date -u -v-${days}d +"%Y-%m-%dT%H:%M:%SZ")
+            START_TIME=$(date -u -d "$days days ago" +"%Y-%m-%dT%H:%M:%SZ" 2>/dev/null || date -u -v-"${days}"d +"%Y-%m-%dT%H:%M:%SZ")
             END_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
         fi
     elif [[ "$today" == true ]]; then

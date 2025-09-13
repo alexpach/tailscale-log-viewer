@@ -161,7 +161,7 @@ generate_log_entry() {
     echo "    {"
     echo "        \"start\": \"$timestamp\","
     echo "        \"end\": \"$timestamp\","
-    echo "        \"nodeId\": \"${NODE_IDS[$((RANDOM % ${#NODE_IDS[@]]})]}}\","
+    echo "        \"nodeId\": \"${NODE_IDS[$((RANDOM % ${#NODE_IDS[@]}))]}}\","
     
     # Generate traffic for each type if randomly selected
     for traffic_type in "${traffic_array[@]}"; do
