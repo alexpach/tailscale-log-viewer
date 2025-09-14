@@ -7,6 +7,16 @@ This document outlines the testing strategy for the ts-logs Tailscale network lo
 
 ### 1. Unit Tests
 
+#### Authentication Tests (`test/test_token_security.sh`)
+- **Purpose**: Validate API token and OAuth authentication security
+- **Coverage**:
+  - API token not exposed in process listings
+  - Token format validation (tskey-* prefix)
+  - OAuth client credentials authentication
+  - OAuth token auto-refresh mechanism
+  - Bearer vs Basic auth header selection
+- **Special Features**: Tests both authentication methods
+
 #### Numeric Validation Tests (`test/test_numeric_validation.sh`)
 - **Purpose**: Validate that time range parameters only accept positive integers
 - **Coverage**:
@@ -60,6 +70,13 @@ This document outlines the testing strategy for the ts-logs Tailscale network lo
 
 ### 3. Manual Testing Checklist
 
+#### Authentication
+- [ ] API token authentication works (TAILSCALE_API_TOKEN)
+- [ ] OAuth client authentication works (TAILSCALE_CLIENT_ID + TAILSCALE_CLIENT_SECRET)
+- [ ] OAuth tokens auto-refresh after 1 hour
+- [ ] Proper error messages for invalid credentials
+- [ ] Fallback from OAuth to API token when both are configured
+
 #### Basic Functionality
 - [ ] Help text displays when no arguments provided
 - [ ] All time range options work (`-m`, `-H`, `-d`, `--since`, `--until`)
@@ -101,6 +118,23 @@ for test in test/*.sh; do
     echo "Running $test..."
     $test
 done
+```
+
+### Testing OAuth Authentication
+```bash
+# Set OAuth credentials in .env
+# TAILSCALE_CLIENT_ID=your-client-id
+# TAILSCALE_CLIENT_SECRET=tskey-client-...
+# Comment out TAILSCALE_API_TOKEN
+
+# Test OAuth authentication
+./ts-logs -m 5
+
+# Test with debug to see OAuth token refresh
+./ts-logs --debug -m 5
+
+# Test fallback (both credentials set)
+TAILSCALE_API_TOKEN=tskey-api-... ./ts-logs -m 5
 ```
 
 ### Running Individual Test Suites

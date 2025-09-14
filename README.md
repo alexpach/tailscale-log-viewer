@@ -61,10 +61,19 @@ An enhanced command-line tool for fetching and analyzing Tailscale network logs 
 
 ### Configuration
 
-Create a `.env` file with your Tailscale configuration:
+Create a `.env` file with your Tailscale configuration.
 
+**Option 1 - API Token (simple)**:
 ```bash
 TAILSCALE_API_TOKEN=tskey-api-your-actual-token-here
+TAILNET=your-company.com
+```
+
+**Option 2 - OAuth Client (recommended)**:
+```bash
+# Comment out TAILSCALE_API_TOKEN if present
+TAILSCALE_CLIENT_ID=your-client-id
+TAILSCALE_CLIENT_SECRET=tskey-client-your-secret-here
 TAILNET=your-company.com
 ```
 

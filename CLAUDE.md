@@ -14,6 +14,8 @@ This is an enhanced Tailscale network logging utility that fetches network logs 
 
 **Status**: ✅ Production Ready - All core functionality tested and working
 
+**Latest Update**: 2025-01-14 - Added OAuth client authentication support
+
 ## Testing Summary
 
 The utility has been comprehensively tested with the following results:
@@ -26,7 +28,9 @@ The utility has been comprehensively tested with the following results:
 - **Time Range Options**: Minutes, hours, and other time range options working
 - **Error Handling**: Helpful error messages that guide users to solutions
 
-### ✅ Enhanced Features Working (Updated 2025-09-12)
+### ✅ Enhanced Features Working (Updated 2025-01-14)
+- **OAuth Client Authentication**: Support for TAILSCALE_CLIENT_ID and TAILSCALE_CLIENT_SECRET with auto-refresh
+- **Dual Authentication**: Seamless support for both API tokens and OAuth clients
 - **Table Format (Default)**: Detailed flows with separate port columns (src-ip, src-port, dst-ip, dst-port, type, proto, txBytes, rxBytes)
 - **Compact Format**: Simplified 4-column view (time, src-ip, dst-ip, type)
 - **Enhanced Summary Format**: Comprehensive machine activity overview with aggregated statistics
@@ -360,20 +364,40 @@ cp .env.example .env
 # Edit .env with your actual values
 ```
 
-Example `.env` file:
+### Option 1: API Token (simple)
 ```bash
 TAILSCALE_API_TOKEN=tskey-api-your-actual-token-here
 TAILNET=your-company.com
 ```
 
+### Option 2: OAuth Client (recommended)
+```bash
+# Comment out or remove TAILSCALE_API_TOKEN
+TAILSCALE_CLIENT_ID=your-client-id
+TAILSCALE_CLIENT_SECRET=tskey-client-your-secret-here
+TAILNET=your-company.com
+```
+
 ## Security Notes
 
-- **API Token**: Script requires either:
-  - API Access Token (simpler but has full permissions)
-  - OAuth Client Token with scopes: `logs:network:read` and `devices:core:read` (recommended)
-- **Configuration file**: Use `.env` file for configuration (never commit this file)
-- **Environment variables**: Can also set `TAILSCALE_API_TOKEN` and `TAILNET` as environment variables
-- **Token format**: `tskey-api-*` format for API access
+### Authentication Methods
+
+1. **API Access Token** (simple, full permissions):
+   - Set `TAILSCALE_API_TOKEN=tskey-api-...` in .env
+   - Has full API access, cannot be scoped
+   - Expires after 1-90 days (user configured)
+
+2. **OAuth Client** (recommended, granular permissions):
+   - Set `TAILSCALE_CLIENT_ID` and `TAILSCALE_CLIENT_SECRET` in .env
+   - Uses only required scopes: `logs:network:read` and `devices:core:read`
+   - Tokens auto-refresh every hour
+   - More secure for production use
+
+### Security Best Practices
+- **Configuration file**: Use `.env` file for credentials (never commit this file)
+- **Token storage**: API token stored in global variable, not echoed
+- **OAuth refresh**: Automatic token refresh with 60-second buffer
+- **Bearer vs Basic**: OAuth uses Bearer auth, API tokens use Basic auth
 
 ## API Endpoints Used
 

@@ -75,7 +75,11 @@
 ### 2025-01-14
 - [x] Improve API token security - use global variable instead of echo - [437a33a](https://github.com/alexpach/tailscale-logging/commit/437a33a)
 - [x] Remove api-token file support (legacy cleanup) - [88cecaf](https://github.com/alexpach/tailscale-logging/commit/88cecaf)
-- [x] Update API token documentation to match actual Tailscale website - [Uncommitted]
+- [x] Update API token documentation to match actual Tailscale website - [4638d79](https://github.com/alexpach/tailscale-logging/commit/4638d79)
+- [x] Implement OAuth client authentication support - [3b35edf](https://github.com/alexpach/tailscale-logging/commit/3b35edf)
+- [x] Add auto-refresh for OAuth tokens (1-hour expiry)
+- [x] Support dual authentication methods (API token or OAuth)
+- [x] Add Bearer authorization for OAuth, Basic auth for API tokens
 
 ### 2025-01-13 (Session 2)
 - [x] Fix jq escaping for special characters in filters (IPv6 addresses work correctly) - [ca5733a](https://github.com/alexpach/tailscale-logging/commit/ca5733a)
