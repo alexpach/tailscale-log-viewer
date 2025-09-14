@@ -239,10 +239,23 @@ should_exclude() {
     if [[ -n $EXCLUDE_SRC ]]; then
         local resolved_src_ip=$(resolve_machine_name_to_ip "$EXCLUDE_SRC" "$ip_name_mapping")
 
-        if [[ $src == *"$EXCLUDE_SRC"* ]]; then
-            ((EXCLUDED_RECORDS++))
-            return 0 # Should exclude
-        elif [[ -n $resolved_src_ip ]] && [[ $src == *"$resolved_src_ip"* ]]; then
+        # Use exact match for IPs, substring match for names
+        if [[ $EXCLUDE_SRC =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] || [[ $EXCLUDE_SRC =~ : ]]; then
+            # IP address - use exact match
+            if [[ $src == "$EXCLUDE_SRC" ]]; then
+                ((EXCLUDED_RECORDS++))
+                return 0 # Should exclude
+            fi
+        else
+            # Machine name - use substring match for flexibility
+            if [[ $src == *"$EXCLUDE_SRC"* ]]; then
+                ((EXCLUDED_RECORDS++))
+                return 0 # Should exclude
+            fi
+        fi
+
+        # Also check resolved IP with exact match
+        if [[ -n $resolved_src_ip ]] && [[ $src == "$resolved_src_ip" ]]; then
             ((EXCLUDED_RECORDS++))
             return 0 # Should exclude
         fi
@@ -252,10 +265,23 @@ should_exclude() {
     if [[ -n $EXCLUDE_DST ]]; then
         local resolved_dst_ip=$(resolve_machine_name_to_ip "$EXCLUDE_DST" "$ip_name_mapping")
 
-        if [[ $dst == *"$EXCLUDE_DST"* ]]; then
-            ((EXCLUDED_RECORDS++))
-            return 0 # Should exclude
-        elif [[ -n $resolved_dst_ip ]] && [[ $dst == *"$resolved_dst_ip"* ]]; then
+        # Use exact match for IPs, substring match for names
+        if [[ $EXCLUDE_DST =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] || [[ $EXCLUDE_DST =~ : ]]; then
+            # IP address - use exact match
+            if [[ $dst == "$EXCLUDE_DST" ]]; then
+                ((EXCLUDED_RECORDS++))
+                return 0 # Should exclude
+            fi
+        else
+            # Machine name - use substring match for flexibility
+            if [[ $dst == *"$EXCLUDE_DST"* ]]; then
+                ((EXCLUDED_RECORDS++))
+                return 0 # Should exclude
+            fi
+        fi
+
+        # Also check resolved IP with exact match
+        if [[ -n $resolved_dst_ip ]] && [[ $dst == "$resolved_dst_ip" ]]; then
             ((EXCLUDED_RECORDS++))
             return 0 # Should exclude
         fi
@@ -1116,6 +1142,20 @@ show_summary() {
     fi
 }
 
+# Helper function to check if a string is an IP address
+is_ip_address() {
+    local str="$1"
+    # Check for IPv4
+    if [[ $str =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+        return 0
+    fi
+    # Check for IPv6 (with or without brackets)
+    if [[ $str =~ : ]] || [[ $str =~ ^\[.*\]$ ]]; then
+        return 0
+    fi
+    return 1
+}
+
 filter_logs() {
     local response="$1"
     local ip_name_mapping="$2"
@@ -1133,37 +1173,89 @@ filter_logs() {
             # Try to resolve machine name to IP
             local resolved_ip=$(resolve_machine_name_to_ip "$FILTER_SRC" "$ip_name_mapping")
 
-            # Create filter that matches both original filter and resolved IP (if found)
-            local src_patterns="\"$FILTER_SRC\""
-            if [[ -n $resolved_ip ]]; then
-                src_patterns+=", \"$resolved_ip\""
+            # Determine if we should use exact match or substring match
+            local match_type="contains"
+            if is_ip_address "$FILTER_SRC"; then
+                match_type="=="
             fi
 
-            filter_conditions+=("(
-                (.virtualTraffic[]? | .src | . as \$src | [$src_patterns] | any(. as \$pattern | \$src | contains(\$pattern))) or
-                (.subnetTraffic[]? | .src | . as \$src | [$src_patterns] | any(. as \$pattern | \$src | contains(\$pattern))) or
-                (.exitTraffic[]? | .src | . as \$src | [$src_patterns] | any(. as \$pattern | \$src | contains(\$pattern))) or
-                (.physicalTraffic[]? | .src | . as \$src | [$src_patterns] | any(. as \$pattern | \$src | contains(\$pattern))) or
-                (.nodeId | contains(\"$FILTER_SRC\"))
-            )")
+            # Create filter based on match type
+            if [[ $match_type == "==" ]]; then
+                # Exact match for IP addresses
+                local src_filter="(
+                    (.virtualTraffic[]? | .src == \"$FILTER_SRC\") or
+                    (.subnetTraffic[]? | .src == \"$FILTER_SRC\") or
+                    (.exitTraffic[]? | .src == \"$FILTER_SRC\") or
+                    (.physicalTraffic[]? | .src == \"$FILTER_SRC\")"
+
+                # Add resolved IP if available
+                if [[ -n $resolved_ip ]]; then
+                    src_filter+=" or (.virtualTraffic[]? | .src == \"$resolved_ip\") or (.subnetTraffic[]? | .src == \"$resolved_ip\") or (.exitTraffic[]? | .src == \"$resolved_ip\") or (.physicalTraffic[]? | .src == \"$resolved_ip\")"
+                fi
+
+                # Add nodeId check for machine names
+                src_filter+=" or (.nodeId | contains(\"$FILTER_SRC\")))"
+
+                filter_conditions+=("$src_filter")
+            else
+                # Substring match for machine names
+                local src_patterns="\"$FILTER_SRC\""
+                if [[ -n $resolved_ip ]]; then
+                    src_patterns+=", \"$resolved_ip\""
+                fi
+
+                filter_conditions+=("(
+                    (.virtualTraffic[]? | .src | . as \$src | [$src_patterns] | any(. as \$pattern | \$src | contains(\$pattern))) or
+                    (.subnetTraffic[]? | .src | . as \$src | [$src_patterns] | any(. as \$pattern | \$src | contains(\$pattern))) or
+                    (.exitTraffic[]? | .src | . as \$src | [$src_patterns] | any(. as \$pattern | \$src | contains(\$pattern))) or
+                    (.physicalTraffic[]? | .src | . as \$src | [$src_patterns] | any(. as \$pattern | \$src | contains(\$pattern))) or
+                    (.nodeId | contains(\"$FILTER_SRC\"))
+                )")
+            fi
         fi
 
         if [[ -n $FILTER_DST ]]; then
             # Try to resolve machine name to IP
             local resolved_ip=$(resolve_machine_name_to_ip "$FILTER_DST" "$ip_name_mapping")
 
-            # Create filter that matches both original filter and resolved IP (if found)
-            local dst_patterns="\"$FILTER_DST\""
-            if [[ -n $resolved_ip ]]; then
-                dst_patterns+=", \"$resolved_ip\""
+            # Determine if we should use exact match or substring match
+            local match_type="contains"
+            if is_ip_address "$FILTER_DST"; then
+                match_type="=="
             fi
 
-            filter_conditions+=("(
-                (.virtualTraffic[]? | .dst | . as \$dst | [$dst_patterns] | any(. as \$pattern | \$dst | contains(\$pattern))) or
-                (.subnetTraffic[]? | .dst | . as \$dst | [$dst_patterns] | any(. as \$pattern | \$dst | contains(\$pattern))) or
-                (.exitTraffic[]? | .dst | . as \$dst | [$dst_patterns] | any(. as \$pattern | \$dst | contains(\$pattern))) or
-                (.physicalTraffic[]? | .dst | . as \$dst | [$dst_patterns] | any(. as \$pattern | \$dst | contains(\$pattern)))
-            )")
+            # Create filter based on match type
+            if [[ $match_type == "==" ]]; then
+                # Exact match for IP addresses
+                local dst_filter="(
+                    (.virtualTraffic[]? | .dst == \"$FILTER_DST\") or
+                    (.subnetTraffic[]? | .dst == \"$FILTER_DST\") or
+                    (.exitTraffic[]? | .dst == \"$FILTER_DST\") or
+                    (.physicalTraffic[]? | .dst == \"$FILTER_DST\")"
+
+                # Add resolved IP if available
+                if [[ -n $resolved_ip ]]; then
+                    dst_filter+=" or (.virtualTraffic[]? | .dst == \"$resolved_ip\") or (.subnetTraffic[]? | .dst == \"$resolved_ip\") or (.exitTraffic[]? | .dst == \"$resolved_ip\") or (.physicalTraffic[]? | .dst == \"$resolved_ip\")"
+                fi
+
+                # Close the parenthesis
+                dst_filter+=")"
+
+                filter_conditions+=("$dst_filter")
+            else
+                # Substring match for machine names
+                local dst_patterns="\"$FILTER_DST\""
+                if [[ -n $resolved_ip ]]; then
+                    dst_patterns+=", \"$resolved_ip\""
+                fi
+
+                filter_conditions+=("(
+                    (.virtualTraffic[]? | .dst | . as \$dst | [$dst_patterns] | any(. as \$pattern | \$dst | contains(\$pattern))) or
+                    (.subnetTraffic[]? | .dst | . as \$dst | [$dst_patterns] | any(. as \$pattern | \$dst | contains(\$pattern))) or
+                    (.exitTraffic[]? | .dst | . as \$dst | [$dst_patterns] | any(. as \$pattern | \$dst | contains(\$pattern))) or
+                    (.physicalTraffic[]? | .dst | . as \$dst | [$dst_patterns] | any(. as \$pattern | \$dst | contains(\$pattern)))
+                )")
+            fi
         fi
 
         # Combine conditions with AND logic

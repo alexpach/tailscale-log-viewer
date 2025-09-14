@@ -1,9 +1,7 @@
 # TODO
 
 ## Critical Bugs & Correctness
-- [ ] Fix jq escaping for special characters in filters (IPv6 addresses with brackets)
-- [ ] Improve filter matching to avoid false positives (use exact/anchored matches)
-- [ ] Ensure debug mode redacts tokens/sensitive data
+- [ ] Refactor filtering to work at flow level instead of log entry level (current design shows all flows from matching entries)
 
 ## Performance Optimization
 - [ ] Optimize multiple `jq` passes through data - combine operations where possible
@@ -74,7 +72,15 @@
 
 ## Completed Items
 
-### 2025-09-13
+### 2025-01-13 (Session 2)
+- [x] Fix jq escaping for special characters in filters (IPv6 addresses work correctly) - [Uncommitted]
+- [x] Improve filter matching to use exact match for IP addresses - [Uncommitted]
+- [x] Ensure debug mode redacts tokens/sensitive data (verified safe) - [Uncommitted]
+- [x] Add is_ip_address() helper function for IP detection - [Uncommitted]
+- [x] Create comprehensive test suite for critical bugs - [Uncommitted]
+- [x] Document filter design limitation in CHANGES.md - [Uncommitted]
+
+### 2025-01-13 (Session 1)
 - [x] Add `--generate-test-data` parameter to generate realistic fake test data - [Uncommitted]
 - [x] Add `--use-test-data` parameter to use cached test data instead of API calls - [Uncommitted]
 - [x] Update test scripts to use test data for large time ranges to avoid API timeouts - [Uncommitted]
