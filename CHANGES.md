@@ -1,5 +1,33 @@
 # CHANGES.md
 
+## 2025-01-14 - OAuth Client Authentication Support
+
+### New Feature: OAuth Client Authentication
+
+1. **Implemented OAuth 2.0 client credentials flow**
+   - Added support for `TAILSCALE_CLIENT_ID` and `TAILSCALE_CLIENT_SECRET`
+   - OAuth tokens automatically refresh before expiry (1-hour lifetime)
+   - Seamless fallback between OAuth and API token authentication
+   - Location: ts-logs lines 130-260
+
+2. **Authentication Methods**
+   - API Token: Simple, full permissions, set via `TAILSCALE_API_TOKEN`
+   - OAuth Client: Granular permissions, auto-refresh, set via client credentials
+   - Script automatically detects which method to use
+
+3. **Implementation Details**
+   - `get_oauth_token()`: Fetches access token from OAuth endpoint
+   - `check_oauth_refresh()`: Checks and refreshes token before API calls
+   - Bearer token authorization for OAuth, Basic auth for API tokens
+   - Token expiry tracked with 60-second buffer for safety
+
+### Benefits
+- **Security**: OAuth allows granular scopes (logs:network:read, devices:core:read)
+- **Automation**: No manual token rotation needed - auto-refresh every hour
+- **Flexibility**: Supports both authentication methods seamlessly
+
+---
+
 ## 2025-01-14 - API Token Security Enhancement, Legacy Cleanup & Documentation Fix
 
 ### Documentation Corrections

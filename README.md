@@ -68,17 +68,24 @@ TAILSCALE_API_TOKEN=tskey-api-your-actual-token-here
 TAILNET=your-company.com
 ```
 
-**API Token Options**:
+**Authentication Options**:
 
 1. **API Access Token** (simpler, but has full permissions):
    - Format: `tskey-api-*`
    - Generate at: [Tailscale Keys](https://login.tailscale.com/admin/settings/keys)
    - Has full API access (cannot be scoped)
+   - Configure: `TAILSCALE_API_TOKEN=tskey-api-...`
 
-2. **OAuth Client Token** (recommended for production):
+2. **OAuth Client** (recommended for production):
    - Create at: [Tailscale OAuth](https://login.tailscale.com/admin/settings/oauth)
    - Required scopes: `logs:network:read` and `devices:core:read`
    - More secure with granular permissions
+   - Configure:
+     ```
+     TAILSCALE_CLIENT_ID=your-client-id
+     TAILSCALE_CLIENT_SECRET=tskey-client-...
+     ```
+   - Tokens auto-refresh every hour
 
 ## Usage
 

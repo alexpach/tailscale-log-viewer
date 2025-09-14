@@ -124,40 +124,135 @@ check_configuration() {
     fi
 }
 
-# Global variable to store API token (more secure than echoing)
+# Global variables for authentication
 API_TOKEN_CACHED=""
+OAUTH_TOKEN_EXPIRY=0
+USING_OAUTH=false
 
-# Initialize API token - sets global variable instead of echoing
-# This avoids potential exposure in process listings or shell tracing
+# Get OAuth access token using client credentials
+get_oauth_token() {
+    local client_id="$1"
+    local client_secret="$2"
+
+    debug_log "Requesting OAuth access token..."
+
+    local response
+    response=$(curl -fsS --retry 3 --retry-connrefused \
+        -d "client_id=${client_id}" \
+        -d "client_secret=${client_secret}" \
+        "https://api.tailscale.com/api/v2/oauth/token" 2>&1)
+
+    local curl_exit=$?
+
+    if [[ $curl_exit -ne 0 ]]; then
+        echo "Error: Failed to get OAuth access token" >&2
+        echo "Response: $response" >&2
+        return 1
+    fi
+
+    # Extract access token from JSON response
+    if command -v jq >/dev/null 2>&1; then
+        local access_token=$(echo "$response" | jq -r '.access_token // empty')
+        local expires_in=$(echo "$response" | jq -r '.expires_in // 3600')
+    else
+        # Fallback to simple extraction if jq not available
+        local access_token=$(echo "$response" | sed -n 's/.*"access_token":"\([^"]*\)".*/\1/p')
+        local expires_in=3600
+    fi
+
+    if [[ -z $access_token ]]; then
+        echo "Error: Failed to extract access token from OAuth response" >&2
+        echo "Response: $response" >&2
+        return 1
+    fi
+
+    # Set expiry time (current time + expires_in - 60 seconds buffer)
+    if command -v gdate >/dev/null 2>&1; then
+        OAUTH_TOKEN_EXPIRY=$(($(gdate +%s) + expires_in - 60))
+    else
+        OAUTH_TOKEN_EXPIRY=$(($(date +%s) + expires_in - 60))
+    fi
+
+    debug_log "OAuth token obtained, expires in ${expires_in} seconds"
+    echo "$access_token"
+}
+
+# Initialize API token - supports both direct tokens and OAuth
 init_api_token() {
+    # First check for direct API token
     if [[ -n ${TAILSCALE_API_TOKEN:-} ]]; then
         API_TOKEN_CACHED="$TAILSCALE_API_TOKEN"
+        debug_log "Using direct API token from environment"
+    # Then check for OAuth client credentials
+    elif [[ -n ${TAILSCALE_CLIENT_ID:-} ]] && [[ -n ${TAILSCALE_CLIENT_SECRET:-} ]]; then
+        debug_log "Using OAuth client credentials"
+        USING_OAUTH=true
+
+        # Get initial OAuth token
+        local token
+        token=$(get_oauth_token "$TAILSCALE_CLIENT_ID" "$TAILSCALE_CLIENT_SECRET")
+
+        if [[ $? -ne 0 ]] || [[ -z $token ]]; then
+            echo "Error: Failed to authenticate with OAuth client credentials" >&2
+            echo "Please verify your TAILSCALE_CLIENT_ID and TAILSCALE_CLIENT_SECRET" >&2
+            exit 1
+        fi
+
+        API_TOKEN_CACHED="$token"
+        echo "Successfully authenticated using OAuth client" >&2
     else
-        echo "Error: No Tailscale API token found." >&2
+        echo "Error: No Tailscale authentication configured." >&2
         echo "" >&2
-        echo "To fix this, you need to create an API token:" >&2
+        echo "You can use either:" >&2
         echo "" >&2
         echo "Option 1: API Access Token (simpler, but has full permissions):" >&2
         echo "  1. Go to: https://login.tailscale.com/admin/settings/keys" >&2
         echo "  2. Click 'Generate access token'" >&2
         echo "  3. Set expiry (1-90 days)" >&2
-        echo "  4. Copy the token (starts with 'tskey-api-')" >&2
+        echo "  4. Add to .env: TAILSCALE_API_TOKEN=tskey-api-..." >&2
         echo "" >&2
-        echo "Option 2: OAuth Client (recommended for production, granular permissions):" >&2
+        echo "Option 2: OAuth Client (recommended, granular permissions):" >&2
         echo "  1. Go to: https://login.tailscale.com/admin/settings/oauth" >&2
         echo "  2. Create OAuth client with scopes: logs:network:read and devices:core:read" >&2
-        echo "  3. Generate an access token from the OAuth client" >&2
-        echo "" >&2
-        echo "Then configure the token:" >&2
-        echo "  - Copy .env.example to .env and add your token there (recommended)" >&2
-        echo "  - Or set environment variable: export TAILSCALE_API_TOKEN='your-token'" >&2
+        echo "  3. Add to .env:" >&2
+        echo "     TAILSCALE_CLIENT_ID=your-client-id" >&2
+        echo "     TAILSCALE_CLIENT_SECRET=tskey-client-..." >&2
         exit 1
     fi
 
     # Validate token format (basic check)
     if [[ ! $API_TOKEN_CACHED =~ ^tskey- ]]; then
-        echo "Error: Invalid API token format. Token should start with 'tskey-'" >&2
+        echo "Error: Invalid token format. Token should start with 'tskey-'" >&2
         exit 1
+    fi
+}
+
+# Check if OAuth token needs refresh (call before API requests)
+check_oauth_refresh() {
+    if [[ $USING_OAUTH != true ]]; then
+        return 0
+    fi
+
+    local current_time
+    if command -v gdate >/dev/null 2>&1; then
+        current_time=$(gdate +%s)
+    else
+        current_time=$(date +%s)
+    fi
+
+    if [[ $current_time -ge $OAUTH_TOKEN_EXPIRY ]]; then
+        debug_log "OAuth token expired, refreshing..."
+
+        local new_token
+        new_token=$(get_oauth_token "$TAILSCALE_CLIENT_ID" "$TAILSCALE_CLIENT_SECRET")
+
+        if [[ $? -ne 0 ]] || [[ -z $new_token ]]; then
+            echo "Error: Failed to refresh OAuth token" >&2
+            exit 1
+        fi
+
+        API_TOKEN_CACHED="$new_token"
+        debug_log "OAuth token refreshed successfully"
     fi
 }
 
@@ -1301,6 +1396,9 @@ fetch_devices() {
         return
     fi
 
+    # Refresh OAuth token if needed
+    check_oauth_refresh
+
     # Use cached token (already initialized)
     local api_token="$API_TOKEN_CACHED"
 
@@ -1318,7 +1416,12 @@ fetch_devices() {
     fi
 
     local response
-    response=$(curl -fsS --retry 3 --retry-connrefused -u "$api_token:" "$url")
+    # Use Bearer token for OAuth, Basic auth for API tokens
+    if [[ $USING_OAUTH == true ]]; then
+        response=$(curl -fsS --retry 3 --retry-connrefused -H "Authorization: Bearer $api_token" "$url")
+    else
+        response=$(curl -fsS --retry 3 --retry-connrefused -u "$api_token:" "$url")
+    fi
     local curl_exit=$?
 
     local fetch_end
@@ -1475,6 +1578,9 @@ fetch_logs() {
         return 0
     fi
     
+    # Refresh OAuth token if needed
+    check_oauth_refresh
+
     # Use cached token (already initialized)
     local api_token="$API_TOKEN_CACHED"
 
@@ -1492,7 +1598,12 @@ fetch_logs() {
     fi
 
     local response
-    response=$(curl -fsS --retry 3 --retry-connrefused -u "$api_token:" "$url")
+    # Use Bearer token for OAuth, Basic auth for API tokens
+    if [[ $USING_OAUTH == true ]]; then
+        response=$(curl -fsS --retry 3 --retry-connrefused -H "Authorization: Bearer $api_token" "$url")
+    else
+        response=$(curl -fsS --retry 3 --retry-connrefused -u "$api_token:" "$url")
+    fi
     local curl_exit=$?
 
     local fetch_end
