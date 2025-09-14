@@ -72,6 +72,10 @@
 
 ## Completed Items
 
+### 2025-01-14
+- [x] Improve API token security - use global variable instead of echo - [437a33a](https://github.com/alexpach/tailscale-logging/commit/437a33a)
+- [x] Remove api-token file support (legacy cleanup) - [Uncommitted]
+
 ### 2025-01-13 (Session 2)
 - [x] Fix jq escaping for special characters in filters (IPv6 addresses work correctly) - [ca5733a](https://github.com/alexpach/tailscale-logging/commit/ca5733a)
 - [x] Improve filter matching to use exact match for IP addresses - [ca5733a](https://github.com/alexpach/tailscale-logging/commit/ca5733a)

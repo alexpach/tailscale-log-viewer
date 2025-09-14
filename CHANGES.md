@@ -1,5 +1,15 @@
 # CHANGES.md
 
+## 2025-01-14 - API Token Security Enhancement & Legacy Cleanup
+
+### Legacy Code Removal
+
+1. **Removed api-token file support**
+   - Eliminated fallback to `api-token` file
+   - Simplified configuration to use only .env file or environment variables
+   - Removed from .gitignore and documentation
+   - Reduces configuration complexity and potential security risks
+
 ## 2025-01-14 - API Token Security Enhancement
 
 ### Changes Made

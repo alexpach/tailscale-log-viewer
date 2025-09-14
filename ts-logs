@@ -132,8 +132,6 @@ API_TOKEN_CACHED=""
 init_api_token() {
     if [[ -n ${TAILSCALE_API_TOKEN:-} ]]; then
         API_TOKEN_CACHED="$TAILSCALE_API_TOKEN"
-    elif [[ -f "api-token" ]]; then
-        API_TOKEN_CACHED=$(cat api-token)
     else
         echo "Error: No Tailscale API token found." >&2
         echo "" >&2
@@ -142,8 +140,7 @@ init_api_token() {
         echo "2. Click 'Generate API key' and set permissions: logs:network:read and devices:read" >&2
         echo "3. Either:" >&2
         echo "   - Copy .env.example to .env and add your token there (recommended)" >&2
-        echo "   - Set environment variable: export TAILSCALE_API_TOKEN='your-token'" >&2
-        echo "   - Or create an 'api-token' file with your token" >&2
+        echo "   - Or set environment variable: export TAILSCALE_API_TOKEN='your-token'" >&2
         exit 1
     fi
 

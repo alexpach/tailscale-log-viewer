@@ -64,8 +64,7 @@ Valid traffic types for -t: virtual, subnet, exit, physical
 ## Project Structure
 
 - `ts-logs`: Enhanced script that fetches Tailscale network logs with flexible options
-- `.env`: Contains configuration (TAILNET, TAILSCALE_API_TOKEN) - copy from `.env.example` 
-- `api-token`: Legacy API token file (deprecated, use .env instead)
+- `.env`: Contains configuration (TAILNET, TAILSCALE_API_TOKEN) - copy from `.env.example`
 
 ## Common Commands
 
@@ -373,7 +372,6 @@ TAILNET=your-company.com
 - **Configuration file**: Use `.env` file for configuration (never commit this file)
 - **Environment variables**: Can also set `TAILSCALE_API_TOKEN` and `TAILNET` as environment variables
 - **Token format**: `tskey-api-*` format for API access
-- **Legacy support**: Still supports `api-token` file for backward compatibility
 
 ## API Endpoints Used
 
