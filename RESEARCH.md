@@ -56,3 +56,55 @@
 ### References
 - jq Manual (contains/test functions): https://jqlang.github.io/jq/manual/
 - Bash pattern matching: https://www.gnu.org/software/bash/manual/html_node/Pattern-Matching.html
+
+---
+
+## 2025-01-14 - API Token Security in Bash
+
+### Issue: get_api_token() function uses echo
+
+**Current Implementation**:
+```bash
+get_api_token() {
+    echo "$TAILSCALE_API_TOKEN"  # or cat api-token
+}
+api_token=$(get_api_token)
+```
+
+**Security Concerns**:
+1. **Process listing**: Echo might briefly expose token in process list
+2. **Shell tracing**: If bash -x is enabled, token appears in debug output
+3. **Command history**: Token might be logged if used in commands
+
+**Research on Alternatives**:
+
+1. **Global Variable Approach**:
+   - Set a global variable instead of echoing
+   - Pros: No subprocess, no echo
+   - Cons: Pollutes global namespace
+
+2. **File Descriptor Approach**:
+   - Pass token through file descriptor
+   - Pros: Most secure, no process exposure
+   - Cons: More complex
+
+3. **Environment Variable Only**:
+   - Require token to be in environment
+   - Pros: Simple, standard practice
+   - Cons: Less flexible
+
+**Best Practice Analysis**:
+- Current implementation is actually relatively safe because:
+  - Token is captured immediately via command substitution
+  - Never passed as command-line argument
+  - curl uses `-u` flag which puts token in HTTP header, not command line
+
+**Recommendation**:
+The current approach is acceptable but could be improved by:
+1. Using a global variable to avoid subprocess
+2. Adding warnings about not using `set -x` with sensitive operations
+3. Ensuring token is never logged or displayed
+
+### References
+- OWASP Bash Security: https://cheatsheetseries.owasp.org/cheatsheets/OS_Command_Injection_Defense_Cheat_Sheet.html
+- Bash Security Best Practices: https://github.com/anordal/shellharden/blob/master/how_to_do_things_safely_in_bash.md

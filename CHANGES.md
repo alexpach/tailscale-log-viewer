@@ -1,5 +1,49 @@
 # CHANGES.md
 
+## 2025-01-14 - API Token Security Enhancement
+
+### Changes Made
+
+1. **Replaced get_api_token() with init_api_token()**
+   - Old function used `echo` which could expose token in process listings
+   - New function stores token in global variable `API_TOKEN_CACHED`
+   - Eliminates subprocess creation and potential token exposure
+   - Location: ts-logs lines 127-155
+
+2. **Added Token Format Validation**
+   - Validates that API tokens start with "tskey-"
+   - Provides clear error message for invalid token formats
+   - Helps catch configuration errors early
+
+3. **Test Data Mode Enhancement**
+   - Skip token initialization when using test data
+   - Uses dummy token for test mode to avoid validation issues
+   - Location: ts-logs lines 1811-1817
+
+### Security Improvements
+
+- **No echo exposure**: Token is never echoed, reducing process listing risks
+- **No subprocess**: Direct variable assignment avoids subprocess creation
+- **Shell trace safe**: Token less likely to appear in bash -x output
+- **Validation**: Basic format checking ensures valid tokens
+
+### Tests Created
+
+1. **test/test_token_security.sh**
+   - Verifies token not visible in process listings
+   - Tests token format validation
+   - Checks shell trace mode security
+   - Validates new implementation
+
+### Verification
+
+Run the security test:
+```bash
+./test/test_token_security.sh
+```
+
+---
+
 ## 2025-01-13 - Critical Bug Fixes
 
 ### Changes Made

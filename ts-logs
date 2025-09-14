@@ -124,11 +124,16 @@ check_configuration() {
     fi
 }
 
-get_api_token() {
+# Global variable to store API token (more secure than echoing)
+API_TOKEN_CACHED=""
+
+# Initialize API token - sets global variable instead of echoing
+# This avoids potential exposure in process listings or shell tracing
+init_api_token() {
     if [[ -n ${TAILSCALE_API_TOKEN:-} ]]; then
-        echo "$TAILSCALE_API_TOKEN"
+        API_TOKEN_CACHED="$TAILSCALE_API_TOKEN"
     elif [[ -f "api-token" ]]; then
-        cat api-token
+        API_TOKEN_CACHED=$(cat api-token)
     else
         echo "Error: No Tailscale API token found." >&2
         echo "" >&2
@@ -139,6 +144,12 @@ get_api_token() {
         echo "   - Copy .env.example to .env and add your token there (recommended)" >&2
         echo "   - Set environment variable: export TAILSCALE_API_TOKEN='your-token'" >&2
         echo "   - Or create an 'api-token' file with your token" >&2
+        exit 1
+    fi
+
+    # Validate token format (basic check)
+    if [[ ! $API_TOKEN_CACHED =~ ^tskey- ]]; then
+        echo "Error: Invalid API token format. Token should start with 'tskey-'" >&2
         exit 1
     fi
 }
@@ -1283,8 +1294,8 @@ fetch_devices() {
         return
     fi
 
-    local api_token
-    api_token=$(get_api_token)
+    # Use cached token (already initialized)
+    local api_token="$API_TOKEN_CACHED"
 
     local url="https://api.tailscale.com/api/v2/tailnet/${TAILNET}/devices"
 
@@ -1457,8 +1468,8 @@ fetch_logs() {
         return 0
     fi
     
-    local api_token
-    api_token=$(get_api_token)
+    # Use cached token (already initialized)
+    local api_token="$API_TOKEN_CACHED"
 
     local url="https://api.tailscale.com/api/v2/tailnet/${TAILNET}/logging/network?start=${START_TIME}&end=${END_TIME}"
 
@@ -1795,6 +1806,15 @@ main() {
 
     # Check configuration before proceeding
     check_configuration
+
+    # Initialize API token (securely stored in global variable)
+    # Skip token initialization if using test data
+    if [[ $USE_TEST_DATA != true ]]; then
+        init_api_token
+    else
+        # For test data, use a dummy token
+        API_TOKEN_CACHED="tskey-api-test-mode"
+    fi
 
     # Record processing start time
     if command -v gdate >/dev/null 2>&1; then
