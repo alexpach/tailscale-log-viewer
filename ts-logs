@@ -135,12 +135,22 @@ init_api_token() {
     else
         echo "Error: No Tailscale API token found." >&2
         echo "" >&2
-        echo "To fix this, you need to:" >&2
-        echo "1. Get an API token from: https://login.tailscale.com/admin/settings/keys" >&2
-        echo "2. Click 'Generate API key' and set permissions: logs:network:read and devices:read" >&2
-        echo "3. Either:" >&2
-        echo "   - Copy .env.example to .env and add your token there (recommended)" >&2
-        echo "   - Or set environment variable: export TAILSCALE_API_TOKEN='your-token'" >&2
+        echo "To fix this, you need to create an API token:" >&2
+        echo "" >&2
+        echo "Option 1: API Access Token (simpler, but has full permissions):" >&2
+        echo "  1. Go to: https://login.tailscale.com/admin/settings/keys" >&2
+        echo "  2. Click 'Generate access token'" >&2
+        echo "  3. Set expiry (1-90 days)" >&2
+        echo "  4. Copy the token (starts with 'tskey-api-')" >&2
+        echo "" >&2
+        echo "Option 2: OAuth Client (recommended for production, granular permissions):" >&2
+        echo "  1. Go to: https://login.tailscale.com/admin/settings/oauth" >&2
+        echo "  2. Create OAuth client with scopes: logs:network:read and devices:core:read" >&2
+        echo "  3. Generate an access token from the OAuth client" >&2
+        echo "" >&2
+        echo "Then configure the token:" >&2
+        echo "  - Copy .env.example to .env and add your token there (recommended)" >&2
+        echo "  - Or set environment variable: export TAILSCALE_API_TOKEN='your-token'" >&2
         exit 1
     fi
 

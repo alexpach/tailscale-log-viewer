@@ -368,7 +368,9 @@ TAILNET=your-company.com
 
 ## Security Notes
 
-- **API Token Permissions**: The script requires access tokens with `logs:network:read` and `devices:read` scopes
+- **API Token**: Script requires either:
+  - API Access Token (simpler but has full permissions)
+  - OAuth Client Token with scopes: `logs:network:read` and `devices:core:read` (recommended)
 - **Configuration file**: Use `.env` file for configuration (never commit this file)
 - **Environment variables**: Can also set `TAILSCALE_API_TOKEN` and `TAILNET` as environment variables
 - **Token format**: `tskey-api-*` format for API access

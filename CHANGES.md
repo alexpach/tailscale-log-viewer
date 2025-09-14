@@ -1,5 +1,17 @@
 # CHANGES.md
 
+## 2025-01-14 - API Token Security Enhancement, Legacy Cleanup & Documentation Fix
+
+### Documentation Corrections
+
+1. **Updated API token creation instructions**
+   - Fixed incorrect claim about setting specific permissions on API tokens
+   - Clarified two token options:
+     - API Access Tokens: Simple but have full permissions (cannot be scoped)
+     - OAuth Clients: Complex but allow granular scopes like `logs:network:read` and `devices:core:read`
+   - Updated error messages, README, .env.example, and CLAUDE.md
+   - Now accurately reflects actual Tailscale website functionality
+
 ## 2025-01-14 - API Token Security Enhancement & Legacy Cleanup
 
 ### Legacy Code Removal

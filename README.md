@@ -68,10 +68,17 @@ TAILSCALE_API_TOKEN=tskey-api-your-actual-token-here
 TAILNET=your-company.com
 ```
 
-**API Token Requirements**:
-- Format: `tskey-api-*` 
-- Required permissions: `logs:network:read` and `devices:read`
-- Generate at: [Tailscale Admin Console](https://login.tailscale.com/admin/settings/keys)
+**API Token Options**:
+
+1. **API Access Token** (simpler, but has full permissions):
+   - Format: `tskey-api-*`
+   - Generate at: [Tailscale Keys](https://login.tailscale.com/admin/settings/keys)
+   - Has full API access (cannot be scoped)
+
+2. **OAuth Client Token** (recommended for production):
+   - Create at: [Tailscale OAuth](https://login.tailscale.com/admin/settings/oauth)
+   - Required scopes: `logs:network:read` and `devices:core:read`
+   - More secure with granular permissions
 
 ## Usage
 
@@ -386,8 +393,9 @@ sudo apt-get install jq
 ```
 
 **"API request failed"**
-- Verify your API token has `logs:network:read` and `devices:read` permissions
 - Check your `.env` file configuration
+- Verify your API token is valid and not expired
+- For OAuth tokens: ensure scopes include `logs:network:read` and `devices:core:read`
 - Ensure your tailnet name is correct
 
 **"No logs found"**
@@ -408,7 +416,7 @@ Enable verbose output to see API requests and responses:
 ## Security Considerations
 
 - **API Token Storage**: Never commit `.env` files to version control
-- **Token Permissions**: Use tokens with minimal required permissions only
+- **Token Permissions**: Consider using OAuth clients for granular permissions instead of full-access tokens
 - **Network Security**: API tokens provide access to network logs - treat as sensitive
 - **Log Retention**: Understand that network logs may contain sensitive traffic information
 
