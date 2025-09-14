@@ -73,12 +73,13 @@
 ## Completed Items
 
 ### 2025-01-13 (Session 2)
-- [x] Fix jq escaping for special characters in filters (IPv6 addresses work correctly) - [Uncommitted]
-- [x] Improve filter matching to use exact match for IP addresses - [Uncommitted]
-- [x] Ensure debug mode redacts tokens/sensitive data (verified safe) - [Uncommitted]
-- [x] Add is_ip_address() helper function for IP detection - [Uncommitted]
-- [x] Create comprehensive test suite for critical bugs - [Uncommitted]
-- [x] Document filter design limitation in CHANGES.md - [Uncommitted]
+- [x] Fix jq escaping for special characters in filters (IPv6 addresses work correctly) - [ca5733a](https://github.com/alexpach/tailscale-logging/commit/ca5733a)
+- [x] Improve filter matching to use exact match for IP addresses - [ca5733a](https://github.com/alexpach/tailscale-logging/commit/ca5733a)
+- [x] Ensure debug mode redacts tokens/sensitive data (verified safe) - [ca5733a](https://github.com/alexpach/tailscale-logging/commit/ca5733a)
+- [x] Add is_ip_address() helper function for IP detection - [ca5733a](https://github.com/alexpach/tailscale-logging/commit/ca5733a)
+- [x] Create comprehensive test suite for critical bugs - [ca5733a](https://github.com/alexpach/tailscale-logging/commit/ca5733a)
+- [x] Document filter design limitation in CHANGES.md - [ca5733a](https://github.com/alexpach/tailscale-logging/commit/ca5733a)
+- [x] Create RESEARCH.md documentation - [Uncommitted]
 
 ### 2025-01-13 (Session 1)
 - [x] Add `--generate-test-data` parameter to generate realistic fake test data - [Uncommitted]
